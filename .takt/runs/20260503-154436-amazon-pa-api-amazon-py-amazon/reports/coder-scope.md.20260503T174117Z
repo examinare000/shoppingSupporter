@@ -1,0 +1,20 @@
+# 変更スコープ宣言
+
+## タスク
+Amazon PA-API 5.0 GetItems の本格実装（SigV4 署名 + リトライ + 共通シェイプ整形）にスタブを置き換える。
+
+## 変更予定
+| 種別 | ファイル |
+|------|---------|
+| 新規 | `api/lib/aws_sigv4.py` |
+| 変更 | `api/lib/amazon.py`（全面書き換え） |
+| 変更 | `api/cron/update_prices.py`（Amazon 分岐の try/except 追加） |
+| 変更 | `.env.example`（`AMAZON_*` 雛形追記） |
+
+## 推定規模
+Medium
+
+## 影響範囲
+- `api/cron/update_prices.py` の Amazon 分岐の例外ハンドリング（楽天/Yahoo は無修正）
+- `api/main.py` の cron エンドポイント経由で `update_site_product` を間接利用
+- 単体／結合テスト（`tests/unit/test_amazon.py`, `tests/unit/test_aws_sigv4.py`, `tests/integration/test_update_prices_amazon.py`）が対象モジュールに依存

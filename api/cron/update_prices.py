@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from ..common.database import SessionLocal
 from ..common.models import Product, EcSiteProduct, PriceHistory, SiteType
-from ..lib.amazon import AmazonAPI
+from ..lib.amazon import AmazonAPI, AmazonAPIError
 from ..lib.rakuten import RakutenAPI
 from ..lib.yahoo import YahooAPI
 
@@ -16,8 +16,15 @@ async def update_site_product(db: Session, site_product: EcSiteProduct):
     result = None
     
     if site_product.site_type == SiteType.AMAZON:
-        api = AmazonAPI()
-        result = await api.fetch_product(site_product.site_product_id)
+        # Why try/except: AmazonAPI は失敗時に例外を送出する契約 (api/lib/amazon.py)。
+        # 1 商品の Amazon 失敗で cron 全体を止めず次商品の処理を続行させる。
+        try:
+            api = AmazonAPI()
+            result = await api.fetch_product(site_product.site_product_id)
+        except AmazonAPIError as e:
+            logger.warning(
+                f"Amazon API failed for {site_product.site_product_id}: {e}"
+            )
     elif site_product.site_type == SiteType.RAKUTEN:
         api = RakutenAPI()
         result = await api.fetch_product(site_product.site_product_id)

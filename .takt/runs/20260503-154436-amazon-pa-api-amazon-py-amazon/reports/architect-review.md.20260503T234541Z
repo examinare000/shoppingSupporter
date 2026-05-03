@@ -1,0 +1,129 @@
+# アーキテクチャレビュー
+
+## 結果: APPROVE
+
+## サマリー
+
+Amazon PA-API 5.0 GetItems 本格実装のアーキテクチャを構造・設計観点でレビューした。
+モジュール分割・依存方向・関数粒度・公開 API 範囲・契約整合・テスト配置のいずれも問題なし。
+本ステップでの過去レビュー履歴はなく、`reports/` 配下の `architect-review.md` は初回出力。
+
+## 前回レビュー履歴の確認
+
+- `reports/architect-review.md` 無印および `architect-review.md.<TS>` ともに不在 → 本ステップ初回。
+- 直前ステップ（ai_review）の最新無印 `reports/ai-review.md` は APPROVE で、新規/persists 0 件、Warning 1 件（テスト定数アサーション重複）を非ブロッキング扱い。
+- アーキテクチャ視点では未検証のため、本レビューで構造・設計を独立評価した。
+
+## 検証観点と結果
+
+### 1. モジュール構成（高凝集・低結合・循環依存）
+
+| 観点 | 結果 | 根拠 |
+|------|------|------|
+| 高凝集 | OK | `aws_sigv4.py` は SigV4 ステップのみ、`amazon.py` は PA-API 通信のみ |
+| 低結合 | OK | `amazon.py` → `aws_sigv4.py` の単方向依存。`aws_sigv4` は AWS 全般の汎用認証で PA-API 知識を含まない |
+| 循環依存 | なし | `update_prices` → `amazon` → `aws_sigv4`（一方向） |
+| ディレクトリ階層 | OK | 既存 `api/lib/` 配下に EC サイトクライアントと並ぶ。`aws_sigv4` は単一ファイルでサブディレクトリは不要 |
+
+### 2. レイヤー設計
+
+`update_prices.py`(cron)→ `amazon.py`(PA-API client)→ `aws_sigv4.py`(auth primitives)の方向で整理されており、上位 → 下位の依存方向が守られている。逆方向の依存・特定実装の汎用層への漏洩は検出されなかった。
+
+### 3. 関数設計（1関数1責務・抽象度の一致）
+
+`amazon.py`:
+- `fetch_product`（L96-101, 6行）: 3 段の高レベルパイプライン。抽象度が一致している。
+- `_build_payload`（L105-113）/`_serialize_payload`（L115-119）/`_build_signed_headers`（L121-147）: 純粋関数寄りの構築処理。
+- `_post_with_retry`（L151-177, 27行）: HTTP 送信＋リトライ制御。署名再生成をループ内に保持する設計判断（coder-decisions #2）と整合。
+- `_parse_success_or_raise`（L179-199, 21行）: HTTP 200 応答の例外昇格判定。
+- `_format_response`（L203-249, 47行）: 共通シェイプへの整形。30 行を超えるが、フィールド抽出と検証が直線的に並ぶため抽象度は一定で読解負荷が低い。Knowledge の「30 行超は分割を検討」は警告観点であり REJECT 基準ではない。
+
+`aws_sigv4.py`:
+- 各 SigV4 ステップ（CR / SignedHeaders / StringToSign / SigningKey / Signature / Authorization）が 1 関数に切り出されており、AWS 仕様の Step 1〜5 と 1:1 対応。
+- 内部ヘルパー（`_credential_scope`, `_hmac_sha256`）は `_` 接頭辞で適切にプライベート化されている。
+
+### 4. 公開 API の範囲
+
+| 公開シンボル | 用途 | 妥当性 |
+|---|---|---|
+| `amazon.AmazonAPI` | ドメインクラス | OK |
+| `amazon.AmazonAPIError` | ドメイン例外 | OK |
+| `amazon.PAAPI_*` 定数 | 仕様定数（テストから直接アサート） | OK（Knowledge: マジックナンバー禁止に従い定数化） |
+| `aws_sigv4.sign_request` | 高レベル API（`amazon.py` のみ消費） | OK |
+| `aws_sigv4.build_*` / `derive_*` / `compute_*` | SigV4 各ステップ | 許容: order.md「各段階で検証できると望ましい」と plan の 4.4 が段階別テストを明示要求。AWS SigV4 仕様自体が 5 ステップとして公開されているため「内部実装の漏洩」に該当しない |
+
+### 5. 契約文字列のハードコード散在
+
+- PA-API 仕様値（HOST/PATH/TARGET/REGION/SERVICE/MARKETPLACE/PARTNER_TYPE/RESOURCES）は `amazon.py` 冒頭にまとめてモジュール定数化（L31-42）。
+- リトライ・タイムアウト定数も同所にまとまる（L46-50）。
+- 環境変数キー名 `AMAZON_ACCESS_KEY` 等は `__init__` 内 1 箇所で集中管理。`update_prices.py` 等の外部からは触らない。
+- 既存パターン（`rakuten.py` / `yahoo.py` の `os.getenv` 直接参照）と整合。新たな腐敗防止層を導入する根拠は薄く、現状で適切。
+
+### 6. 呼び出しチェーン検証
+
+`AmazonAPI.fetch_product` の戻り値契約変更（`Optional[Dict]` → `Dict | raise`）について、唯一の本番呼び出し元 `api/cron/update_prices.py:18-27` を grep で確認。`try/except AmazonAPIError` で適切にラップされており、`result["price"]` / `result.get("points", 0)` / `result.get("url")` の消費キーはすべて `_format_response` の戻り値（`site/id/title/price/image_url/url`）で満たされている。`points` は意図的に未返却で、`.get` の default=0 に委ねる設計（coder-decisions #6）で整合。
+
+### 7. デッドコード／未使用
+
+- `amazon.py` import: `asyncio` / `json` / `os` / `random` / `datetime` / `timezone` / `Any` / `Dict` / `Optional` / `httpx` / `aws_sigv4` → 全て使用。
+- `aws_sigv4.py` import: `hashlib` / `hmac` / `Mapping` → 全て使用。
+- 公開関数は本番（`sign_request`）またはテスト（その他のステップ関数）から消費。スタブ残骸（`pass` / `NotImplementedError` / ダミー戻り値）なし。
+
+### 8. テストカバレッジ（構造観点）
+
+| 観点 | テスト | 配置 |
+|------|--------|------|
+| SigV4 各ステップ正当性 | `tests/unit/test_aws_sigv4.py`（公式 get-vanilla ベクター） | unit |
+| PA-API リクエスト組み立て | `tests/unit/test_amazon.py::TestRequestBuilding` | unit |
+| レスポンス整形 | `tests/unit/test_amazon.py::TestResponseFormatting` | unit |
+| HTTP/PA-API エラー昇格 | `tests/unit/test_amazon.py::TestHttpErrors` | unit |
+| 指数バックオフ | `tests/unit/test_amazon.py::TestRetry` | unit |
+| 認証情報の境界検証 | `tests/unit/test_amazon.py::TestInitCredentialValidation` | unit |
+| 結合（cron 内例外封じ込め） | `tests/integration/test_update_prices_amazon.py` | integration |
+
+依存配置（`tests/unit/` vs `tests/integration/`）が責務に沿っており、結合テストは MagicMock で DB を切り離して実 DB 起動を回避（order.md 制約準拠）。
+
+### 9. ファイル分割（行数）
+
+| ファイル | 行数 | 判定 |
+|---------|------|------|
+| `api/lib/amazon.py` | 250 | Knowledge「200 行超 → 分割を検討」のゾーンだが、内訳の多くが Why コメントとモジュールドキュメンテーション。コード実体は約 150 行で単一責務（PA-API 5.0 GetItems クライアント）。Warning 閾値（300 行）未満で分割不要 |
+| `api/lib/aws_sigv4.py` | 176 | 200 行未満。問題なし |
+| `tests/unit/test_amazon.py` | 499 | テストファイルの行数超過は policy「原則 Warning」。実害（フレーク・誤検知・回帰検出不能）の根拠はなく REJECT 対象外 |
+| `tests/unit/test_aws_sigv4.py` | 449 | 同上 |
+
+### 10. 設計判断（coder-decisions.md）の妥当性
+
+| # | 判断 | 評価 |
+|---|------|------|
+| 1 | SignedHeaders を必須 4 種に絞り `Content-Type` は署名後付与 | PA-API 5.0 仕様準拠で妥当 |
+| 2 | リトライ毎に X-Amz-Date と署名を再生成 | SigV4 の有効期限／将来のリトライ拡張に頑健で妥当 |
+| 3 | `json.dumps` の `separators=(",", ":")` 固定 | 署名対象バイト一致の要請を満たす根本対処で妥当 |
+| 4 | `id = item.get("ASIN", asin)` のリクエスト ASIN フォールバック | 同値情報源への切り替えで「データ欠落の隠蔽」ではない。妥当 |
+| 5 | `transport: Optional[...] = None` 既定値 | 本番は既定 None（httpx 標準動作）、テストのみ DI。policy 許容範囲内で妥当 |
+| 6 | `points` キー非返却で呼び出し側 default=0 に委ねる | PA-API が値を提供しない事実を反映。Why コメントで明示しており妥当 |
+
+## 今回の指摘（new）
+
+なし。
+
+## 継続指摘（persists）
+
+なし（前回レビュー履歴なし）。
+
+## 解消済み（resolved）
+
+なし。
+
+## 再開指摘（reopened）
+
+なし。
+
+## 参考情報（Warning — 非ブロッキング）
+
+- `tests/unit/test_amazon.py:131-133` と `:497-498` で `PAAPI_HOST` / `PAAPI_REGION` のモジュール定数アサーションが重複（ai-review 承継）。policy「テストファイルの重複は原則 Warning」に該当し、実害なし。記録のみ。
+- `api/lib/amazon.py` の 250 行は Knowledge「200 行超 → 分割を検討」のゾーンだが、Warning 閾値（300 行）未満かつ単一責務であり、現状の構成のまま維持で問題なし。
+
+## 総合判定
+
+ブロッキング問題（`new` / `persists` / `reopened`）が 0 件のため **APPROVE**。
