@@ -8,7 +8,7 @@ import os
 # Create tables if they don't exist
 # Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Shopping Supporter API")
+app = FastAPI(title="pricehack API")
 
 @app.get("/api/health")
 def health_check():
