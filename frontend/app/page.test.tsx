@@ -9,23 +9,25 @@ describe('HomePage（トップページ統合）', () => {
     window.localStorage.clear();
   });
 
-  it('初期表示で Masthead と HeroSearch の主要文言と全件結果セクションが表示される', () => {
+  it('初期表示で pricehack ロゴ・h1 ヘッドライン・検索フォームのみが見え、結果セクションは出ない', () => {
     render(<HomePage />);
 
-    // Masthead: 題字
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Shopping Dossier' }),
-    ).toBeInTheDocument();
+    // Masthead: pricehack ワードマーク（Logo コンポーネント）
+    // ロゴはテキスト構成のため getAllByText で取得（フッタにも並ぶため複数 hit を許容）
+    expect(screen.getAllByText('pricehack').length).toBeGreaterThanOrEqual(1);
 
-    // HeroSearch: 巨大ヘッドライン（aria-label に集約済み）
-    expect(screen.getByLabelText('実質、いくら。')).toBeInTheDocument();
+    // HeroSearch: ページ唯一の h1 として「実質、いくら。」が aria-label で読める
+    expect(
+      screen.getByRole('heading', { level: 1, name: '実質、いくら。' }),
+    ).toBeInTheDocument();
 
     // 検索フォームが配置されている
     expect(screen.getByRole('searchbox')).toBeInTheDocument();
 
-    // 全件表示方針: 初期 query 空でもモック商品 8 件分の article が出ている
-    const articles = screen.getAllByRole('article');
-    expect(articles.length).toBeGreaterThanOrEqual(8);
+    // 検索前: SearchResultsSection は描画されない
+    // 結果セクション固有の "Hits N 件" 表記が無いこと、article 要素が 0 件であること
+    expect(screen.queryByText(/Hits/)).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('article')).toHaveLength(0);
   });
 
   it('検索フォームに「イヤホン」を入力 → submit すると結果セクションに該当商品名が出る', async () => {
