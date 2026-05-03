@@ -8,3 +8,4 @@
 - [ADR-002: Vercel への移行とサーバーレスアーキテクチャへの刷新](002-multi-container-architecture.md) (刷新)
 - [ADR-003: 公式API連携への移行とPlaywrightの廃止](003-playwright-scraping.md) (刷新)
 - [ADR-004: エディトリアルデザインの採用とモック先行のフロントエンド開発](004-editorial-design-and-mock-first-frontend.md)
+- [ADR-005: モック駆動フロントから実バックエンドへの移行戦略](005-mock-to-backend-migration.md) (提案中)
