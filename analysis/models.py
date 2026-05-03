@@ -3,12 +3,25 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, JSON, String, Text, BigInteger
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
 
 class Base(DeclarativeBase):
     pass
+
 
 class RakutenRank(enum.Enum):
     REGULAR = "regular"
@@ -17,10 +30,12 @@ class RakutenRank(enum.Enum):
     PLATINUM = "platinum"
     DIAMOND = "diamond"
 
+
 class SiteType(enum.Enum):
     AMAZON = "amazon"
     RAKUTEN = "rakuten"
     YAHOO = "yahoo"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -32,6 +47,7 @@ class User(Base):
 
     profile: Mapped["UserProfile"] = relationship(back_populates="user", uselist=False)
 
+
 class Card(Base):
     __tablename__ = "cards"
 
@@ -40,6 +56,7 @@ class Card(Base):
     base_reward_rate: Mapped[float] = mapped_column(Float, default=1.0)
     annual_fee: Mapped[int] = mapped_column(Integer, default=0)
     special_rewards: Mapped[dict] = mapped_column(JSON, default=dict)
+
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"
@@ -52,6 +69,7 @@ class UserProfile(Base):
 
     user: Mapped["User"] = relationship(back_populates="profile")
 
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -60,9 +78,16 @@ class Product(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     jan_code: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True)
     image_url: Mapped[Optional[str]] = mapped_column(String(1024))
+    tags: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    in_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    current_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Maintained by a Postgres BEFORE INSERT/UPDATE trigger; see
+    # backend/alembic/versions/0002_product_search_columns.py.
+    search_vector: Mapped[Optional[str]] = mapped_column(TSVECTOR, nullable=True)
 
     site_products: Mapped[List["EcSiteProduct"]] = relationship(back_populates="product")
+
 
 class EcSiteProduct(Base):
     __tablename__ = "ec_site_products"
@@ -70,12 +95,13 @@ class EcSiteProduct(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id"), nullable=False)
     site_type: Mapped[SiteType] = mapped_column(Enum(SiteType), nullable=False)
-    site_product_id: Mapped[str] = mapped_column(String(100), nullable=False) # ASIN, ItemCode etc.
+    site_product_id: Mapped[str] = mapped_column(String(100), nullable=False)  # ASIN, ItemCode etc.
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     product: Mapped["Product"] = relationship(back_populates="site_products")
     price_histories: Mapped[List["PriceHistory"]] = relationship(back_populates="ec_site_product")
+
 
 class PriceHistory(Base):
     __tablename__ = "price_histories"

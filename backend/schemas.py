@@ -1,29 +1,35 @@
 """Pydantic schemas for API responses.
 
-`ProductOut` mirrors the existing `Product` ORM columns so consumers receive the
-canonical product shape without re-defining fields per endpoint.
+`ProductSummary` and `ProductSearchEnvelope` belong to the search endpoint.
+The envelope's keys are camelCase to match the public HTTP contract; pydantic
+aliases let the ORM-side stay snake_case while the JSON response uses
+camelCase without a manual mapping layer.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ProductOut(BaseModel):
-    # `from_attributes=True` lets FastAPI serialize SQLAlchemy ORM rows directly,
-    # avoiding a manual mapping layer between models and responses.
+class ProductSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
-    # No `= None` defaults: `from_attributes=True` always reads the value from
-    # the ORM instance, so the default is unreachable. `Optional[...]` alone
-    # already permits NULL columns.
     description: Optional[str]
-    jan_code: Optional[str]
-    image_url: Optional[str]
-    created_at: datetime
+    image_url: Optional[str] = Field(serialization_alias="imageUrl")
+    tags: List[str]
+    in_stock: bool = Field(serialization_alias="inStock")
+    current_price: Optional[int] = Field(serialization_alias="currentPrice")
+
+
+class ProductSearchEnvelope(BaseModel):
+    # Items are typed as `ProductSummary`; FastAPI converts each ORM row via
+    # `from_attributes=True` when the handler returns SQLAlchemy instances.
+    items: List[ProductSummary]
+    page: int
+    total_pages: int = Field(serialization_alias="totalPages")
+    total_count: int = Field(serialization_alias="totalCount")

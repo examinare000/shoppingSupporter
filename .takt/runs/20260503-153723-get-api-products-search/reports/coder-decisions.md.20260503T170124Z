@@ -1,0 +1,38 @@
+# 決定ログ
+
+## 1. `search_vector` を生成カラムからトリガーベースに変更
+- **背景**: プラン記載の `Computed("...", persisted=True)`（Postgres `GENERATED ALWAYS AS ... STORED`）で実装したところ、Postgres 15 が `to_tsvector(regconfig, text)` を STABLE と判定し `generation expression is not immutable` で migration が失敗した。`'simple'::regconfig` への明示キャストでも改善せず、根本的に `to_tsvector` のボラティリティが障壁。
+- **検討した選択肢**:
+  1. 生成カラムを諦め、トリガーで `BEFORE INSERT/UPDATE` ごとに `search_vector` を更新
+  2. `IMMUTABLE` 宣言したラッパー関数を `to_tsvector` の上に被せて生成カラムを維持
+  3. 生成カラムを諦め、アプリ側で都度 `to_tsvector(...)` を式として書く
+- **理由**: (2) の `IMMUTABLE` 嘘つきラッパーは設定（`default_text_search_config`）変更時に不整合を生むリスクがあり、`to_tsvector` の元のボラティリティを破る。(3) は GIN インデックスが効かなくなる。(1) は Postgres FTS のレファレンス実装にも載っている標準的なパターンで、副作用なしで GIN インデックスもそのまま活かせる。
+
+## 2. `array_to_string` を `immutable_array_to_string` ラッパーに置換
+- **背景**: trigram GIN インデックスを式インデックスとして作る際、`array_to_string(text[], text)` が STABLE のため `functions in index expression must be marked IMMUTABLE` で migration が失敗。
+- **検討した選択肢**:
+  1. trigram GIN インデックスを諦める（テストは通るがプロダクション性能を犠牲）
+  2. `searchable_text` 列を別途追加してトリガーで埋め、その列を index する
+  3. `IMMUTABLE` ラッパー関数 `immutable_array_to_string(text[], text)` を導入する
+- **理由**: (1) は性能要件をプランに合わない形で削る。(2) は trigger 責務が増え、search_vector との二重メンテになる。(3) はラッパー1つで済み、リポジトリ側の `func.immutable_array_to_string(...)` 呼び出しが index 式と byte-equivalent になり GIN を使わせられる。`array_to_string` 自体の volatility は他用途では維持される。
+
+## 3. Alembic enum 重複作成の回避を生 SQL `DO $$ ... duplicate_object ... END $$` で対処
+- **背景**: SQLAlchemy の `Enum(create_type=False)` を user_profiles の `rakuten_rank` 列に指定しても、`create_table` の `before_create` イベントが `CreateEnumType` を発行してしまい、複数テーブルで同 enum を参照すると 2 度目で `duplicate_object` エラー。
+- **検討した選択肢**:
+  1. `Enum(create_type=False)` でなく `postgresql.ENUM(create_type=False)` に置換し、enum は事前に `DO $$ ... duplicate_object ... END $$` で冪等に作成
+  2. `op.get_bind().exec_driver_sql("SET ...")` でトランザクションを分離する
+  3. `checkfirst=True` の挙動に頼る（試したが効かなかった）
+- **理由**: (1) はエラーハンドリングが Postgres 側で完結し、Alembic の冪等再適用にも耐える。`postgresql.ENUM(create_type=False)` を併用することでカラム定義側でも enum 再作成を防止できる。
+
+## 4. envelope のキー命名を pydantic `serialization_alias` で実現
+- **背景**: ORM 列名（snake_case）と HTTP レスポンス（camelCase）の二重メンテを避けつつ、テストの `EXPECTED_ITEM_KEYS = {imageUrl, inStock, currentPrice, ...}` を満たす必要があった。
+- **検討した選択肢**:
+  1. `model_config = ConfigDict(alias_generator=to_camel)` で全フィールドを変換
+  2. フィールドごとに `Field(serialization_alias=...)` で必要なキーだけ camelCase に
+  3. ハンドラ内で手動 dict マッピング
+- **理由**: (2) は `id`/`name`/`description`/`tags`/`page`/`items` のように元から camelCase 互換のフィールドはそのまま、`image_url`→`imageUrl` 等の差分のみエイリアスを書く形で読みやすい。`@router.get(..., response_model_by_alias=True)` で FastAPI 側に変換責務を委譲でき、ハンドラはシリアライズに関与しない。
+
+## 5. `total_count == 0` 時の `total_pages` を 0 にする
+- **背景**: テスト `test_should_report_zero_totalPages_when_no_match` が `body["totalPages"] == 0` を要求。`math.ceil(0 / 10) == 0` なので算術的には自動で満たすが、明示的に 0 を返す方が意図が読み取れる。
+- **検討した選択肢**: `math.ceil(total / PAGE_SIZE) if total else 0` vs `(total + PAGE_SIZE - 1) // PAGE_SIZE`
+- **理由**: 前者は「0 件は 0 ページ」の意図がコードに表れる。後者でも結果は同じだが、読み手が剰余演算の意図を逐次解釈する必要がある。

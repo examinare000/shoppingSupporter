@@ -1,119 +1,110 @@
-"""GET /api/products/search router and search helper.
+"""Product search router.
 
-Per order.md, every error path (q missing/empty/oversized, limit out-of-range,
-DB failures, validation errors) is converted to 200 + []. Validation-error
-fallback for non-numeric `limit` is registered globally in `main.py`; this
-module owns the handler-level guards plus the SQL execution.
+Owns the HTTP boundary for `GET /api/products/search`:
+- Parses and validates query string parameters (FastAPI `Query` constraints).
+- Performs the cross-field `priceMin <= priceMax` check.
+- Translates camelCase HTTP parameter names into the snake_case `SearchParams`
+  consumed by the repository.
+- Wraps the repository result in the `{items, page, totalPages, totalCount}`
+  envelope.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+import math
+import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import case, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Product
-from schemas import ProductOut
+from repositories.products import (
+    PAGE_SIZE,
+    SearchParams,
+    SortKey,
+    search_products,
+)
+from schemas import ProductSearchEnvelope, ProductSummary
 
 logger = logging.getLogger(__name__)
 
-# Contract constants. Defined once so the handler, validation-error fallback,
-# and any future caller all reference the same values.
 ROUTER_PREFIX = "/api/products"
 SEARCH_PATH = "/search"
-SEARCH_FULL_PATH = ROUTER_PREFIX + SEARCH_PATH
 
+# `q` length cap and sort allowlist are part of the public contract; tests
+# in test_product_search.py assert the boundaries.
 Q_MAX_LENGTH = 100
-LIMIT_DEFAULT = 10
-LIMIT_MAX = 100
-
-# Backslash is the LIKE escape character; user-supplied % / _ / \ are escaped
-# with it so that they are matched as literals rather than wildcards.
-LIKE_ESCAPE = "\\"
-
 
 router = APIRouter(prefix=ROUTER_PREFIX, tags=["products"])
 
 
-def _escape_like(value: str) -> str:
-    # Order matters: escape backslashes first so we do not double-escape the
-    # backslashes we then introduce for % and _.
-    return (
-        value.replace(LIKE_ESCAPE, LIKE_ESCAPE + LIKE_ESCAPE)
-        .replace("%", LIKE_ESCAPE + "%")
-        .replace("_", LIKE_ESCAPE + "_")
-    )
-
-
-def search_products(db: Session, q: str, limit: int) -> Sequence[Product]:
-    """Run the relevance-ordered ILIKE search for `q`.
-
-    Caller is responsible for trimming `q`, enforcing length limits, and
-    clamping `limit`. Filter, sort, and limit are all pushed to the SQL layer
-    so we never load the full table into Python.
-
-    SQLAlchemy 2.0 `.scalars().all()` already materializes a list, so we
-    expose the underlying Sequence rather than copying it again.
-    """
-    q_lower = q.lower()
-    q_lower_escaped = _escape_like(q_lower)
-    contains_pattern = f"%{q_lower_escaped}%"
-    prefix_pattern = f"{q_lower_escaped}%"
-
-    name_lower = func.lower(Product.name)
-    description_lower = func.lower(Product.description)
-
-    # Relevance tiers per plan.md: name exact > name prefix > name contains >
-    # description contains. The first matching branch wins, so a product whose
-    # name fully equals q is scored 4 even if its description also contains q.
-    relevance = case(
-        (name_lower == q_lower, 4),
-        (name_lower.like(prefix_pattern, escape=LIKE_ESCAPE), 3),
-        (name_lower.like(contains_pattern, escape=LIKE_ESCAPE), 2),
-        (description_lower.like(contains_pattern, escape=LIKE_ESCAPE), 1),
-        else_=0,
-    )
-
-    stmt = (
-        select(Product)
-        .where(
-            Product.name.ilike(contains_pattern, escape=LIKE_ESCAPE)
-            | Product.description.ilike(contains_pattern, escape=LIKE_ESCAPE)
+def _validate_price_range(price_min: Optional[int], price_max: Optional[int]) -> None:
+    if price_min is None or price_max is None:
+        return
+    if price_min > price_max:
+        # 422 keeps semantics aligned with FastAPI's per-parameter validators
+        # so callers see the same status for every input-shape failure.
+        raise HTTPException(
+            status_code=422,
+            detail="priceMin must be less than or equal to priceMax",
         )
-        .order_by(relevance.desc(), Product.name.asc(), Product.id.asc())
-        .limit(limit)
+
+
+def _build_envelope(
+    items, page: int, total_count: int
+) -> ProductSearchEnvelope:
+    total_pages = math.ceil(total_count / PAGE_SIZE) if total_count else 0
+    summaries = [ProductSummary.model_validate(p) for p in items]
+    return ProductSearchEnvelope(
+        items=summaries,
+        page=page,
+        total_pages=total_pages,
+        total_count=total_count,
     )
 
-    return db.execute(stmt).scalars().all()
 
-
-@router.get(SEARCH_PATH, response_model=list[ProductOut])
+# `response_model_by_alias=True` is what makes the JSON keys camelCase
+# (`imageUrl`, `inStock`, `currentPrice`, `totalPages`, `totalCount`).
+@router.get(
+    SEARCH_PATH,
+    response_model=ProductSearchEnvelope,
+    response_model_by_alias=True,
+)
 def search_products_endpoint(
-    q: Optional[str] = Query(default=None),
-    limit: int = Query(default=LIMIT_DEFAULT),
+    q: str = Query(min_length=1, max_length=Q_MAX_LENGTH),
+    inStock: Optional[bool] = Query(default=None),
+    priceMin: Optional[int] = Query(default=None, ge=0),
+    priceMax: Optional[int] = Query(default=None, ge=0),
+    sort: SortKey = Query(default="relevance"),
+    page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
-) -> Sequence[Product]:
-    if q is None:
-        return []
+) -> ProductSearchEnvelope:
+    # FastAPI's per-Query validation handles bounds, type, and required-ness.
+    # The cross-field check is the only validation that lives in the handler
+    # because pydantic Query parameters cannot express it directly.
+    _validate_price_range(priceMin, priceMax)
 
-    normalized_q = q.strip()
-    if not normalized_q or len(normalized_q) > Q_MAX_LENGTH:
-        return []
+    params = SearchParams(
+        q=q,
+        in_stock=inStock,
+        price_min=priceMin,
+        price_max=priceMax,
+        sort=sort,
+        page=page,
+    )
 
-    if limit < 1:
-        return []
+    started = time.monotonic()
+    items, total_count = search_products(db, params)
+    elapsed_ms = (time.monotonic() - started) * 1000
+    # Log only metadata. Raw `q` is intentionally not logged so user input
+    # never lands in operational logs.
+    logger.info(
+        "product search executed q_len=%d hits=%d elapsed_ms=%.1f",
+        len(q),
+        total_count,
+        elapsed_ms,
+    )
 
-    effective_limit = min(limit, LIMIT_MAX)
-
-    try:
-        return search_products(db, normalized_q, effective_limit)
-    except Exception:
-        # order.md: any error returns []. We log without exposing q so
-        # raw user input never lands in operational logs.
-        logger.warning("product search failed", exc_info=True)
-        return []
+    return _build_envelope(items, page=page, total_count=total_count)
