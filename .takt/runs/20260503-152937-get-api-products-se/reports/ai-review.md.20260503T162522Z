@@ -1,0 +1,30 @@
+# AI生成コードレビュー
+
+## 結果: REJECT
+
+## サマリー
+`limit` パラメータの `Optional[int]` 型と `is None` 分岐が到達不能なデッドディフェンシブコードとなっており、「念のためのコード」アンチパターンに該当するため REJECT。
+
+## 検証した項目
+| 観点 | 結果 | 備考 |
+|------|------|------|
+| 仮定の妥当性 | ✅ | `description` カラム追加は order.md「説明文を対象に検索」要件から正当に導出。ADR-002 同期済み |
+| API/ライブラリの実在 | ✅ | FastAPI/SQLAlchemy 2.0/Pydantic API すべて実在 |
+| コンテキスト適合 | ✅ | 既存命名・`Depends(get_db)` 再利用・Python 3.11 で `list[X]` ランタイム評価可 |
+| スコープ | ✅ | order.md 全要件充足、scope creep / 縮小なし |
+
+## 今回の指摘（new）
+| # | finding_id | family_tag | カテゴリ | 場所 | 問題 | 修正案 |
+|---|------------|------------|---------|------|------|--------|
+| 1 | AI-NEW-backend-routers-products-L94 | dead-defensive-code | 念のためコード | `backend/routers/products.py:94,104` | `limit: Optional[int] = Query(default=LIMIT_DEFAULT)` は既定値が int (=10) のため None にならず、不正値は `RequestValidationError` で 200+`[]` 変換されるため `if limit is None` 分岐は到達不能 | 型注釈を `limit: int = Query(default=LIMIT_DEFAULT)` に変更し、ガードを `if limit < 1: return []` に置換 |
+| 2 | AI-NEW-backend-routers-products-L88 | redundant-conversion | 冗長変換 | `backend/routers/products.py:88` | `db.execute(stmt).scalars().all()` は SQLAlchemy 2.0 で既に list を返すため `list(...)` ラッパは不要なコピー | `return db.execute(stmt).scalars().all()` |
+| 3 | AI-NEW-backend-schemas-L23 | unused-default | 不要既定値 | `backend/schemas.py:23-25` | `from_attributes=True` で ORM から取得する response model に `Optional[str] = None` の既定値は不要（`Optional[str]` のみで NULL 許容を表現可） | `description: Optional[str]` 等へ既定値削除（優先度低、可読性のみ） |
+
+## 継続指摘（persists）
+（初回レビューのため該当なし）
+
+## 解消済み（resolved）
+（初回レビューのため該当なし）
+
+## 再開指摘（reopened）
+（初回レビューのため該当なし）

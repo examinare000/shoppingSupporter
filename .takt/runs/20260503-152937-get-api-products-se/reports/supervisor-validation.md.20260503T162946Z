@@ -1,0 +1,77 @@
+# 最終検証結果
+
+## 結果: APPROVE
+
+## 要件充足チェック
+
+`order.md` から要件を最小単位まで分解し、実コード・実行ログで個別検証した。
+
+| # | 要件（タスク指示書から抽出） | 充足 | 根拠（ファイル:行 / 証跡） |
+|---|---|---|---|
+| 1 | `GET /api/products/search` のメソッド/パスを提供する | ✅ | `backend/routers/products.py:27-29,40,95` (`ROUTER_PREFIX="/api/products"` + `SEARCH_PATH="/search"` + `@router.get(SEARCH_PATH)`)、`backend/main.py:9` `app.include_router(products_router)` |
+| 2 | クエリパラメータ `q` (string, 必須) を受け取る | ✅ | `backend/routers/products.py:97` `q: Optional[str] = Query(default=None)` + `:101-102` `q is None → []`（仕様「エラー時 空配列」に準拠した必須化） |
+| 3 | クエリパラメータ `limit` (number, 任意) を受け取る | ✅ | `backend/routers/products.py:98` `limit: int = Query(default=LIMIT_DEFAULT)` |
+| 4 | `limit` 未指定時のデフォルトは 10 | ✅ | `backend/routers/products.py:32` `LIMIT_DEFAULT = 10`、テスト `test_should_default_limit_to_10_when_not_provided` PASSED |
+| 5 | 商品名を対象にあいまい検索する | ✅ | `backend/routers/products.py:85` `Product.name.ilike(contains_pattern, escape=LIKE_ESCAPE)` |
+| 6 | 説明文を対象にあいまい検索する | ✅ | `backend/routers/products.py:86` `Product.description.ilike(contains_pattern, ...)`、`backend/models.py:60` `description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)` |
+| 7 | 結果は関連度順（デフォルトソート）で返す | ✅ | `backend/routers/products.py:74-80,88` `case((name==q, 4), (name prefix, 3), (name contains, 2), (description contains, 1))` + `order_by(relevance.desc(), ...)`、テスト `test_should_rank_by_relevance_tiers` / `test_should_order_endpoint_results_by_relevance` PASSED |
+| 8 | 返却フィールドは既存商品スキーマに準拠 | ✅ | `backend/schemas.py:16-29` `ProductOut` が `Product` モデルの全列（id/name/description/jan_code/image_url/created_at）を `from_attributes=True` で公開、テスト `test_should_return_response_with_product_schema_keys` PASSED |
+| 9 | ページネーションは `limit` のみ（オフセット/ページなし） | ✅ | `backend/routers/products.py:96-99` ハンドラ引数に `q` と `limit` のみ |
+| 10 | 検索エラー時は空配列を返す | ✅ | `backend/routers/products.py:113-119` `try/except Exception → []`、テスト `TestEndpointDatabaseError::test_should_return_empty_array_when_db_execute_raises` PASSED |
+| 11 | 該当なし時は空配列を返す | ✅ | SQL の自然挙動 + テスト `test_should_return_empty_array_when_no_match` PASSED |
+| 12 | 認証不要 | ✅ | 認証ミドルウェア未登録、テスト `test_should_not_require_authentication` PASSED |
+| 13 | リクエストクエリ・レスポンスの型定義を既存型システムに合わせて追加 | ✅ | `backend/schemas.py` (Pydantic v2 `BaseModel` + `ConfigDict(from_attributes=True)`)、`Query()` で型注釈付与 |
+| 14 | レスポンス型は既存商品スキーマを再利用（新規定義しない） | ✅ | `ProductOut` は `Product` ORM カラムの 1:1 公開で、列構成は変更なし。`description` 追加は order.md「説明文を対象に検索」「説明文のみマッチ」テスト要件由来の正当化済み拡張 |
+| 15 | テスト: `q` ヒット・複数件・関連度順 | ✅ | `TestSearchProductsName`(3) / `TestSearchProductsRelevanceOrder`(2) PASSED |
+| 16 | テスト: `limit` 指定で件数制限 | ✅ | `TestSearchProductsLimit::test_should_respect_limit_argument` / `test_should_apply_limit_from_query_string` PASSED |
+| 17 | テスト: `limit` 未指定でデフォルト 10 適用 | ✅ | `test_should_default_limit_to_10_when_not_provided` PASSED |
+| 18 | テスト: `q` がヒットしない場合空配列 | ✅ | `test_should_return_empty_when_no_product_matches` / `test_should_return_empty_array_when_no_match` PASSED |
+| 19 | テスト: 検索エラー発生時に空配列 | ✅ | `TestEndpointDatabaseError::test_should_return_empty_array_when_db_execute_raises` PASSED |
+| 20 | テスト: `q` 空文字、`limit` 0 / 負値 / 非数値の境界値 | ✅ | `test_should_return_empty_array_when_q_is_empty_string`、`test_should_return_empty_array_when_limit_is_zero`、`..._negative`、`..._non_numeric` PASSED |
+| 21 | テスト: 商品名のみマッチ・説明文のみマッチ・両方マッチ | ✅ | `TestSearchProductsMatchKinds`(3) PASSED |
+| 22 | ルーティング/インテグレーションテスト: クエリパラメータが正しく解釈される | ✅ | `TestEndpointQueryParameterContract`(3) PASSED |
+| 23 | ルーティング/インテグレーションテスト: 認証なしで200応答 | ✅ | `test_should_not_require_authentication` PASSED |
+| 24 | ルーティング/インテグレーションテスト: レスポンス形状が既存商品スキーマと一致 | ✅ | `test_should_return_response_with_product_schema_keys` PASSED（`ProductOut.model_fields.keys()` と完全一致） |
+
+未充足要件: 0 件。
+
+## 前段 finding の再評価
+
+| finding_id | 前段判定 | 再評価 | 根拠 |
+|---|---|---|---|
+| AI-NEW-backend-routers-products-L94 | resolved | 妥当 | `backend/routers/products.py:98` で `limit: int = Query(default=LIMIT_DEFAULT)`、`:108` で `if limit < 1: return []`。`is None` 分岐が消失し dead-defensive code が解消 |
+| AI-NEW-backend-routers-products-L88 | resolved | 妥当 | `backend/routers/products.py:92` で `return db.execute(stmt).scalars().all()`。冗長な `list(...)` ラッパが除去され、SQLAlchemy 2.0 の `ScalarResult.all()` が返す list をそのまま返却 |
+| AI-NEW-backend-schemas-L23 | resolved | 妥当 | `backend/schemas.py:26-28` で `description`/`jan_code`/`image_url` の `= None` 既定値が削除。`Optional[str]` のみとなり、`from_attributes=True` 経由の ORM 直変換と整合（既定値は到達不能だった） |
+
+副作用チェックも実施:
+- 戻り値型 `Sequence[Product]` 変更 → `from collections.abc import Sequence` を追加。SQLAlchemy 2.0 `.scalars().all()` の戻り値は実体が `list` のため、テスト `result == []` / `len(result)` / `result[0].name` での参照は互換。
+- 未使用 import なし: `Optional` は `q: Optional[str]` で使用継続、`Sequence` は L53/L100 で使用。
+- `analysis/models.py:60` も `description` カラムが同期されており ADR-002 充足を確認。
+
+## 検証サマリー
+
+| 項目 | 状態 | 確認方法 |
+|---|---|---|
+| テスト | ✅ | 当 supervisor が `python -m pytest -v` を実行: **31 passed in 0.16s**（全 11 単体 + 20 統合）。`backend/pytest.ini` 設定下で全件 PASSED を直接確認 |
+| ビルド | ✅ | `implement.1` レポートで `python -m py_compile` 全変更ファイル OK、`from main/routers.products/schemas/models import ...` 全件成功を記録。当 supervisor の pytest collection でも import 段階エラー 0 を確認 |
+| 動作確認 | ✅ | TestClient 経由で endpoint を起動し HTTP 200 応答・JSON 形状・ヘッダなしアクセス・DB 例外注入・特殊文字エスケープ（`%`/`_`）・relevance 順序・101 文字超過・`limit` 境界値（0/-1/abc/9999）すべて pytest で PASSED。`curl` 起動確認は未実施だが `TestClient` が同じ ASGI 経路を実行する実証になる |
+
+## 成果物
+
+- 作成:
+  - `backend/schemas.py`
+  - `backend/routers/__init__.py`
+  - `backend/routers/products.py`
+  - `backend/pytest.ini`
+  - `backend/tests/__init__.py`
+  - `backend/tests/conftest.py`
+  - `backend/tests/test_product_search.py`
+- 変更:
+  - `backend/main.py`（router 登録 + `RequestValidationError` の 200+`[]` 変換ハンドラ）
+  - `backend/models.py`（`Product.description: Optional[str]` 追加 + `Text` import）
+  - `analysis/models.py`（ADR-002 同期）
+  - `backend/requirements.txt`（`pytest`/`httpx` 追加）
+
+## 未完了項目（REJECTの場合）
+
+なし（APPROVE）。
