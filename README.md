@@ -1,39 +1,57 @@
 # Shopping Supporter
 
-ECショッピングを賢くサポートするための、複数サイト横断価格比較・分析ツール。
+ショッピングの実質価格（価格 - ポイント）を比較し、最適な購入先を提案するツール。
 
-## 概要
+## アーキテクチャ
 
-Amazon, 楽天市場, Yahoo!ショッピングなどの複数サイトを横断検索し、ユーザーの会員ステータスや所有カードに基づいた「実質価格」を算出・比較します。また、価格推移を分析し、最適な買い時を提案します。
+Vercel へのデプロイに最適化されたサーバーレス構成を採用しています。
 
-## 機能（予定）
+- **Frontend**: Next.js (Vercel)
+- **Backend (API)**: FastAPI (Vercel Functions)
+- **Database**: PostgreSQL (Managed service like Neon, Supabase, or Vercel Postgres)
+- **Data Source**: Amazon PA-API, 楽天商品検索API, Yahoo!ショッピング商品検索API
 
-- **横断価格比較**: 複数サイトの実質価格（送料、ポイント還元込み）を一覧表示
-- **ユーザー最適化**: 会員ランクや所有カードに応じた還元率計算
-- **価格推移分析**: 過去の価格データを蓄積し、グラフ化
-- **損益分岐点判定**: カード年会費に対して、獲得ポイントが上回っているかをシミュレーション
+## プロジェクト構造
 
-## 技術スタック
-
-- **Frontend**: Next.js (TypeScript, Tailwind CSS)
-- **Backend**: FastAPI (Python)
-- **Database**: PostgreSQL
-- **Data Collection**: Playwright (Python)
-- **Infrastructure**: Docker Compose
-
-## クイックスタート
-
-```bash
-# 環境変数の準備
-cp .env.example .env
-
-# コンテナの起動
-docker compose up -d --build
+```
+/
+├── api/                # Backend logic (FastAPI)
+│   ├── common/         # DB models and connection
+│   ├── cron/           # Price update tasks
+│   └── lib/            # External API clients (Amazon, Rakuten, Yahoo)
+├── frontend/           # Frontend (Next.js)
+├── docs/               # Documentation (ADRs, System Design)
+├── vercel.json         # Vercel configuration
+└── requirements.txt    # Python dependencies
 ```
 
-## ドキュメント
+## セットアップ
 
-詳細は `docs/` 配下を参照してください。
+### 環境変数の設定
 
-- [システム設計書](docs/system-design.md)
-- [アーキテクチャ決定記録 (ADR)](docs/adr/README.md)
+`.env` ファイルを作成し、以下の情報を設定してください。
+
+- `DATABASE_URL`: PostgreSQLの接続文字列
+- `RAKUTEN_APP_ID`: 楽天アプリID
+- `YAHOO_CLIENT_ID`: Yahoo! JAPAN Client ID
+- `AMAZON_ACCESS_KEY`: Amazon PA-API アクセスキー
+- `AMAZON_SECRET_KEY`: Amazon PA-API シークレットキー
+- `AMAZON_PARTNER_TAG`: Amazon アソシエイト・プログラムのトラッキングID
+
+### ローカル開発
+
+```bash
+# API
+pip install -r requirements.txt
+uvicorn api.main:app --reload
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+## デプロイ
+
+Vercel に GitHub リポジトリを連携するだけで自動的にデプロイされます。
+Cron Jobs は `vercel.json` で定義されており、Vercel ダッシュボードで有効化してください。
