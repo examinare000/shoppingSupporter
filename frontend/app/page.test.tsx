@@ -16,9 +16,9 @@ describe('HomePage（トップページ統合）', () => {
     // ロゴはテキスト構成のため getAllByText で取得（フッタにも並ぶため複数 hit を許容）
     expect(screen.getAllByText('pricehack').length).toBeGreaterThanOrEqual(1);
 
-    // HeroSearch: ページ唯一の h1 として「実質、いくら。」が aria-label で読める
+    // HeroSearch: ページ唯一の h1 として「Where To Buy That?」が aria-label で読める
     expect(
-      screen.getByRole('heading', { level: 1, name: '実質、いくら。' }),
+      screen.getByRole('heading', { level: 1, name: 'Where To Buy That?' }),
     ).toBeInTheDocument();
 
     // 検索フォームが配置されている

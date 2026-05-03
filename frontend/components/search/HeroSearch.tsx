@@ -4,7 +4,7 @@ import { SearchForm } from './SearchForm';
  * トップ最上部のヒーロー検索領域。
  *
  * 設計意図:
- * - ページ全体の唯一の h1 として「実質、いくら。」を据える。
+ * - ページ全体の唯一の h1 として「Where To Buy That?」を据える。
  *   Masthead からタイトル h1 を取り除いた結果、ここがページの主見出しになる。
  * - 旧版にあった「Issue 0001 · Front Page」「実質価格特集 / Effective Price Edition」
  *   「Cross-merchant editorial price desk」「ドロップキャップ付きリード」は、
@@ -17,26 +17,28 @@ interface HeroSearchProps {
   onSearch: (query: string) => void;
 }
 
-// 「実質、いくら。」を 1 文字ずつ span に分割し、index ごとに animation-delay をズラす
-const HEADLINE_CHARS = ['実', '質', '、', 'い', 'く', 'ら', '。'];
+// 単語単位で span 化し animation-delay をズラす。
+// 文字単位だと狭い表示幅で文字ごとに改行されて題字が崩れるため、
+// 単語境界（スペース）でのみ折り返すよう inline-block を単語単位に変更している。
+const HEADLINE_WORDS = ['Where', 'To', 'Buy', 'That?'];
 
 export function HeroSearch({ onSearch }: HeroSearchProps) {
   return (
     <section className="px-6 pt-16 pb-12">
       <div className="max-w-3xl mx-auto text-center">
         <h1
-          aria-label="実質、いくら。"
-          className="font-display font-black tracking-tightest leading-[0.85] text-ink"
-          style={{ fontSize: 'clamp(64px, 9vw, 132px)' }}
+          aria-label="Where To Buy That?"
+          className="font-display font-black tracking-tight leading-[0.95] text-ink break-normal"
+          style={{ fontSize: 'clamp(48px, 7.5vw, 96px)' }}
         >
-          {HEADLINE_CHARS.map((char, i) => (
+          {HEADLINE_WORDS.map((word, i) => (
             <span
-              key={`${char}-${i}`}
+              key={`${word}-${i}`}
               aria-hidden="true"
-              className="inline-block hero-char"
-              style={{ animationDelay: `${i * 60}ms` }}
+              className="inline-block hero-char mr-[0.25em] last:mr-0"
+              style={{ animationDelay: `${i * 100}ms` }}
             >
-              {char}
+              {word}
             </span>
           ))}
         </h1>
