@@ -1,15 +1,17 @@
-import { RuledDivider } from '@/components/editorial/RuledDivider';
 import { SearchForm } from './SearchForm';
 
 /**
  * トップ最上部のヒーロー検索領域。
  *
  * 設計意図:
- * - ディスプレイセリフでの巨大ヘッドライン「実質、いくら。」を主役に据える
- * - 右半分のリードでサービスのスコープを編集記事のリード文として説明する
- * - 下端に検索フォームをフルブリードで配置
- * - 上端に二重罫線、左肩に「ISSUE 0001」の小カプスで紙面の表紙感を作る
- * - ヘッドラインに staggered fadeInUp を仕込む（prefers-reduced-motion で無効化済み）
+ * - ページ全体の唯一の h1 として「実質、いくら。」を据える。
+ *   Masthead からタイトル h1 を取り除いた結果、ここがページの主見出しになる。
+ * - 旧版にあった「Issue 0001 · Front Page」「実質価格特集 / Effective Price Edition」
+ *   「Cross-merchant editorial price desk」「ドロップキャップ付きリード」は、
+ *   検索前のトップ画面では装飾過多で視線が散るため削除。
+ * - レイアウトは grid をやめ、縦積み中央寄せに変更。新聞の表紙ティザーのように、
+ *   題字下に短い 1 文リードと検索フォームだけが落ちている構成にする。
+ * - ヘッドラインの 1 文字ずつのスタッガー出現アニメーションは継承。
  */
 interface HeroSearchProps {
   onSearch: (query: string) => void;
@@ -20,21 +22,11 @@ const HEADLINE_CHARS = ['実', '質', '、', 'い', 'く', 'ら', '。'];
 
 export function HeroSearch({ onSearch }: HeroSearchProps) {
   return (
-    <section className="px-6 pt-6 pb-12">
-      <RuledDivider variant="double" />
-      <div className="pt-4 pb-8 flex items-center justify-between">
-        <span className="font-mono text-xs small-caps text-ink-muted">
-          Issue 0001 · Front Page
-        </span>
-        <span className="font-mono text-xs small-caps text-ink-muted">
-          実質価格特集 / Effective Price Edition
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-end">
-        <h2
+    <section className="px-6 pt-16 pb-12">
+      <div className="max-w-3xl mx-auto text-center">
+        <h1
           aria-label="実質、いくら。"
-          className="md:col-span-8 font-display font-black tracking-tightest leading-[0.85] text-ink"
+          className="font-display font-black tracking-tightest leading-[0.85] text-ink"
           style={{ fontSize: 'clamp(64px, 9vw, 132px)' }}
         >
           {HEADLINE_CHARS.map((char, i) => (
@@ -47,21 +39,18 @@ export function HeroSearch({ onSearch }: HeroSearchProps) {
               {char}
             </span>
           ))}
-        </h2>
+        </h1>
 
-        <div className="md:col-span-4 font-serif text-base leading-relaxed text-ink-muted">
-          <p className="mb-2 first-letter:font-display first-letter:text-5xl first-letter:font-bold first-letter:float-left first-letter:mr-2 first-letter:leading-none first-letter:text-ink">
-            Amazon、楽天、Yahoo!ショッピング — 三紙横断で、本体価格・送料・ポイントを差し引いた「実質価格」を一覧化する。
-          </p>
-          <p className="font-mono text-xs small-caps text-ink-muted/70 mt-3">
-            Cross-merchant editorial price desk
+        <p className="mt-8 font-serif text-base md:text-lg leading-relaxed text-ink-muted">
+          Amazon・楽天・Yahoo!ショッピングを横断し、送料・ポイントを差し引いた実質価格で比較する。
+        </p>
+
+        <div className="mt-10 text-left">
+          <SearchForm onSearch={onSearch} />
+          <p className="mt-3 font-mono text-xs small-caps text-ink-muted/70">
+            品名・ブランド・JAN で検索
           </p>
         </div>
-      </div>
-
-      <div className="mt-12">
-        <RuledDivider variant="single" className="mb-6" />
-        <SearchForm onSearch={onSearch} />
       </div>
 
       {/*
