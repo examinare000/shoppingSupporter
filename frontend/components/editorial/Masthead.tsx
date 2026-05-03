@@ -1,37 +1,33 @@
+import Link from 'next/link';
+import { Logo } from '@/components/branding/Logo';
 import { RuledDivider } from './RuledDivider';
 
 /**
- * 新聞題字風ヘッダー。ページ最上部に固定配置される編集部のクレジット領域。
+ * 紙面ヘッダー。
  *
- * 構成:
- *   [二重罫線]
- *   [EDITION No. ... | TOKYO]    ← 上段ステータスバー（モノスペース小カプス）
- *   [ Shopping Dossier ]         ← 中央題字（巨大ディスプレイセリフ）
- *   [ — 実質価格を、編集の眼で。 — ]  ← サブヘッド
- *   [単線罫線]
- *
- * EDITION 番号と日付は固定値で運用する（モック段階では版の概念を持たないため）。
- * 将来的には CMS の発行日メタを差し込む箇所になる。
+ * 設計意図:
+ * - サイト名（pricehack ワードマーク）と日付スタンプのみのミニマル構成。
+ *   旧構成の「Edition No / Tokyo / 二重罫線 / キャッチフレーズ」は、ヒーローの h1 と
+ *   役割が重複してダサくなるため一掃する（ページ全体の h1 はヒーローの「実質、いくら。」に集約）。
+ * - ロゴは `<Link href="/">` でホームに遷移する。クリック可能な題字は新聞紙面の慣例から外れるが、
+ *   Web のヘッダーとしては自然で発見性が高いトレードオフを優先する。
+ * - 日付は固定値（モック段階）。将来は記事配信日のメタを差し込む予定地点。
  */
 export function Masthead() {
   return (
     <header className="w-full bg-paper">
-      <RuledDivider variant="double" />
-      <div className="px-6 pt-3 pb-1 flex items-center justify-between gap-4">
+      <RuledDivider variant="single" />
+      <div className="px-6 py-4 flex items-center justify-between gap-4">
+        <Link
+          href="/"
+          aria-label="pricehack.net ホームへ"
+          className="inline-flex hover:opacity-80 transition-opacity"
+        >
+          <Logo size="md" as="span" />
+        </Link>
         <span className="font-mono text-xs small-caps text-ink-muted">
-          Edition No. 0001
+          2026.05.03
         </span>
-        <span className="font-mono text-xs small-caps text-ink-muted">
-          2026.05.03 — Tokyo
-        </span>
-      </div>
-      <div className="px-6 pb-2 text-center">
-        <h1 className="font-display font-black tracking-tightest text-[clamp(48px,9vw,112px)] leading-[0.9]">
-          Shopping Dossier
-        </h1>
-        <p className="mt-1 font-mono text-xs small-caps text-ink-muted">
-          — 実質価格を、編集の眼で。 —
-        </p>
       </div>
       <RuledDivider variant="single" />
     </header>
