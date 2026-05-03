@@ -3,8 +3,8 @@ import { fraunces, newsreader, jetbrainsMono } from './fonts';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Shopping Dossier — 実質価格の編集部',
-  description: 'Amazon・楽天・Yahoo!ショッピングの実質価格を、編集の眼で横断する。',
+  title: 'pricehack — 実質価格で横断比較',
+  description: 'Amazon・楽天・Yahoo!ショッピングの実質価格（送料・ポイント込み）を横断比較する pricehack.net。',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
