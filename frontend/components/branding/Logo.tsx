@@ -12,7 +12,7 @@ import type { ElementType } from 'react';
  * - 大小判定は size prop（sm/md/lg）でクラスを切替。動的サイズ（vw 等）にしないのは、
  *   呼び出し側の文脈（ヘッダー / フッタ / ヒーロー）で離散的に扱った方が制御しやすいため。
  * - as prop で要素を h1 / span / div に切替。デフォルトは span（装飾的な利用が多いため）。
- *   ページの h1 はヒーローの「実質、いくら。」に集約しているため、Masthead 側ではロゴを span として使う。
+ *   ページの h1 はヒーローの「Where To Buy That?」に集約しているため、Masthead 側ではロゴを span として使う。
  * - withDomain=false で `.net` を非表示にできる（コンパクトな配置や、ドメインを既に文脈で示している箇所向け）。
  *
  * A11y: ロゴ自体がテキストで構成されているため、スクリーンリーダーは "pricehack.net" を自然に読み上げる。
