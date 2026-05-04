@@ -1,0 +1,89 @@
+# 最終検証結果
+
+## 結果: APPROVE
+
+## 要件充足チェック
+
+`order.md` の各条項を、検証可能な最小単位まで分解し、`plan.md` に依存せず実コードで個別照合した。
+
+| # | 要件（タスク指示書から抽出） | 充足 | 根拠（ファイル:行） |
+|---|---------------------------|------|-------------------|
+| 1 | `GET /api/products/search` を提供する | ✅ | `backend/routers/products.py:70-74`（`@router.get(SEARCH_PATH, ...)` + `prefix=ROUTER_PREFIX="/api/products"` L33,L40）+ `backend/main.py:6`（`include_router`） |
+| 2 | `q` を必須クエリパラメータとして受け取る | ✅ | `backend/routers/products.py:76`（`q: str = Query(min_length=1, max_length=Q_MAX_LENGTH)` ＝ default 無し → 必須） |
+| 3 | `inStock` を任意で受け取る | ✅ | `backend/routers/products.py:77`（`inStock: Optional[bool] = Query(default=None)`） |
+| 4 | `priceMin` を任意で受け取る | ✅ | `backend/routers/products.py:78`（`priceMin: Optional[int] = Query(default=None, ge=0)`） |
+| 5 | `priceMax` を任意で受け取る | ✅ | `backend/routers/products.py:79`（`priceMax: Optional[int] = Query(default=None, ge=0)`） |
+| 6 | `sort` を任意で受け取る（選択肢は Planner 判断 = relevance/price_asc/price_desc/newest） | ✅ | `backend/routers/products.py:80` + `backend/repositories/products.py:35`（`SortKey = Literal["relevance","price_asc","price_desc","newest"]`） |
+| 7 | `page` を任意で受け取る（1始まり） | ✅ | `backend/routers/products.py:81`（`page: int = Query(default=1, ge=1)`） |
+| 8 | `inStock` 在庫ありフィルタが効く | ✅ | `backend/repositories/products.py:79-80`（`Product.in_stock.is_(params.in_stock)` を WHERE に追加） |
+| 9 | `priceMin` 価格下限フィルタが効く | ✅ | `backend/repositories/products.py:84-85`（`Product.current_price >= params.price_min`） |
+| 10 | `priceMax` 価格上限フィルタが効く | ✅ | `backend/repositories/products.py:86-87`（`Product.current_price <= params.price_max`） |
+| 11 | 1ページ 10件固定 | ✅ | `backend/repositories/products.py:27`（`PAGE_SIZE = 10`）→ `144` 行で `.limit(PAGE_SIZE)` |
+| 12 | レスポンスに総件数を含める | ✅ | `backend/schemas.py:35`（`total_count` + `serialization_alias="totalCount"`） |
+| 13 | レスポンスに現在ページを含める | ✅ | `backend/schemas.py:33`（`page: int`） |
+| 14 | レスポンスに総ページ数を含める | ✅ | `backend/schemas.py:34`（`total_pages` + `serialization_alias="totalPages"`） + `routers/products.py:58`（`math.ceil(total_count / PAGE_SIZE) if total_count else 0`） |
+| 15 | Postgres 全文検索（tsvector/tsquery）を使用する | ✅ | `backend/repositories/products.py:72-74`（`Product.search_vector @@ websearch_to_tsquery(...)` ） + `backend/alembic/versions/0002_product_search_columns.py:100`（`search_vector tsvector`） |
+| 16 | Trigram（pg_trgm）を併用する | ✅ | `backend/repositories/products.py:75`（`func.similarity(searchable, q_param) > 0.3`） + `backend/alembic/versions/0002_product_search_columns.py:61`（`CREATE EXTENSION IF NOT EXISTS pg_trgm`） |
+| 17 | 検索対象に商品名を含める | ✅ | `0002_product_search_columns.py:43`（`coalesce(NEW.name, '')`）+ `repositories/products.py:62`（`Product.name`） |
+| 18 | 検索対象に説明文を含める | ✅ | `0002_product_search_columns.py:44`（`coalesce(NEW.description, '')`）+ `repositories/products.py:64`（`Product.description`） |
+| 19 | 検索対象にタグを含める | ✅ | `0002_product_search_columns.py:45`（`immutable_array_to_string(NEW.tags, ' ')`）+ `repositories/products.py:66`（`func.immutable_array_to_string(Product.tags, " ")`） |
+| 20 | 必要なインデックス（GIN等）のマイグレーションを提供する | ✅ | `backend/alembic/versions/0002_product_search_columns.py:122-130`（`GIN(search_vector)` + `GIN(... gin_trgm_ops)` + B-tree on `current_price`） |
+| 21 | 商品サマリのみを返却する（Planner 判断: id/name/description/imageUrl/tags/inStock/currentPrice） | ✅ | `backend/schemas.py:17-26`（`ProductSummary` 7フィールド） |
+| 22 | ソート選択肢に対応する ORDER BY 分岐を実装する | ✅ | `backend/repositories/products.py:104-118`（`_order_by` で 4 分岐） |
+| 23 | バリデーションエラー時のレスポンスを既存 API 規約に揃える（FastAPI 既定の 422） | ✅ | per-Query 制約は FastAPI 既定で 422、cross-field は `backend/routers/products.py:49-52`（`HTTPException(status_code=422)`） |
+| 24 | 検索クエリの発行をロギングする | ✅ | `backend/routers/products.py:103-108`（`logger.info("product search executed q_len=%d hits=%d elapsed_ms=%.1f", ...)`） |
+| 25 | `q` 等のユーザ入力を生のままログに残さない | ✅ | `backend/routers/products.py:104-105`（`len(q)` のみ。`q` 自体は format 引数に含めず） |
+| 26 | 認証要否を Planner が判断（既存設計書に規定なし → 未認証で公開） | ✅ | `backend/routers/products.py` 全体に `Depends(security)` 等の認証依存性なし |
+| 27 | `q` 必須未指定 → バリデーションエラー | ✅ | テスト `test_should_return_422_when_q_missing`（line 628-630）。実装は Query default 無し |
+| 28 | `priceMin/Max` 非数値 → バリデーションエラー | ✅ | テスト `test_should_return_422_when_priceMin_non_numeric` / `_priceMax_non_numeric`（647-657）。Query 型注釈 `int` で FastAPI が 422 |
+| 29 | `priceMin > priceMax` → バリデーションエラー | ✅ | `backend/routers/products.py:43-52`（`_validate_price_range`） + テスト 640-645 |
+| 30 | `sort` 値域違反 → バリデーションエラー | ✅ | `Literal["relevance",...]` 型注釈で FastAPI が 422 + テスト 667-671 |
+| 31 | `page` 0/負/非数値 → バリデーションエラー | ✅ | `Query(default=1, ge=1)` + 型注釈 `int` + テスト 673-683（3 ケース） |
+| 32 | タイポ含みでも近い商品がヒット | ✅ | テスト `test_should_match_typo_via_trigram`（line 157-166）`strawbery → strawberry` |
+| 33 | レスポンス envelope 形式は既存 API に合わせる（既存に envelope 前例なし → Planner 判断で4キー新設） | ✅ | `backend/schemas.py:29-35` + テスト `EXPECTED_ENVELOPE_KEYS = {items, page, totalPages, totalCount}`（line 46） |
+
+すべての要件を実コードで確認した。❌ なし。
+
+## 前段 finding の再評価
+
+| finding_id | 前段判定 | 再評価 | 根拠 |
+|------------|----------|--------|------|
+| AI-NEW-backend-schemas-L21（`ProductOut` dead-code） | resolved（ai-review.md） | 妥当（resolved） | `Grep "ProductOut" backend/` → 0 件、`backend/schemas.py:1-15` に `from datetime import datetime` なし、`ProductSummary`/`ProductSearchEnvelope` のみ定義 |
+| AI-NEW-backend-routers-products-L93（`sort` allowlist double-check） | resolved（ai-review.md） | 妥当（resolved） | `Grep "ALLOWED_SORTS" backend/` → 0 件、`backend/routers/products.py:23-28` の import 一覧から削除済み。`SortKey` Literal は handler/`SearchParams.sort`/`_order_by` で継続使用、`test_should_return_422_when_sort_value_not_in_allowed_set` が事前 422 化を担保 |
+| AI-NEW-backend-repositories-products-L129（`page<1` ValueError） | resolved（ai-review.md） | 妥当（resolved） | `backend/repositories/products.py:121-148` の `search_products` に `page < 1` チェックなし。`Query(default=1, ge=1)` ＋ `test_should_return_422_when_page_zero/page_negative` で代替担保 |
+| AI-NEW-backend-schemas-L38（`populate_by_name` + 誤説明） | resolved（ai-review.md） | 妥当（resolved） | `backend/schemas.py:18` は `ConfigDict(from_attributes=True)` のみ。`Grep "populate_by_name" backend/` → 0 件 |
+
+前段（ai-review.md 最新）の APPROVE と一致。`requirements-review` ステップは workflow に存在しないため対象外。
+
+## 検証サマリー
+
+| 項目 | 状態 | 確認方法 |
+|------|------|---------|
+| テスト | ⚠️ | `implement.1.20260503T170137Z.md:31` で `pytest backend/tests/test_product_search.py` → **52 passed in 3.74s**（リポジトリ 18 + エンドポイント 13 + バリデーション 12 + クエリ文字列契約 3 + その他 6）。**注意**: ai-fix 後に再実行されていない（`ai-fix.1.20260503T171136Z.md:38` は環境制約により未実行と明記）。ただし ai-fix の修正は (a) 未参照 `ProductOut` 削除、(b) 到達不能 `if sort not in ALLOWED_SORTS` 削除、(c) 到達不能 `if params.page < 1` 削除、(d) 無効果な `populate_by_name=True` 削除のみで、いずれもテスト観測可能な振る舞いに影響しない（既存 52 件のテストはこれらのデッドパスを通らない）ため、回帰なしと判断 |
+| ビルド | ✅ | `implement.1.20260503T170137Z.md:26-27` で `from main import app`、`from repositories.products import SearchParams, search_products`、`from schemas import ProductSummary, ProductSearchEnvelope`、`from models import Product`（analysis 側）すべて正常 import 確認。FastAPI ルート `/api/products/search` の登録確認済み。ai-fix 後に `ai-fix.1.20260503T171136Z.md:38` で 3 ファイル `python3 -m ast.parse` syntax OK |
+| 動作確認 | ✅ | テスト `client.get(ENDPOINT, params={"q": "..."})` 経由で 25 ケースの統合テストを実行（`backend/tests/test_product_search.py:372-729`）。envelope 形状・camelCase キー（`imageUrl`/`inStock`/`currentPrice`/`totalPages`/`totalCount`）・ページネーション境界（25件で page=3 → 5件、20件で totalPages=2、0件で totalPages=0、page=999 echo）・FTS（name/description/tags 各経路）・Trigram タイポ・フィルタ複合・ソート 4 種・デフォルト=relevance 同値性・認証不要・422 検証 13 ケース・クエリ文字列契約 3 ケースを実行確認 |
+
+## 成果物
+
+- 作成:
+  - `backend/repositories/__init__.py`
+  - `backend/repositories/products.py`（`SearchParams` frozen dataclass、`search_products` リポジトリ層、relevance スコア合成）
+  - `backend/alembic.ini`、`backend/alembic/env.py`、`backend/alembic/script.py.mako`
+  - `backend/alembic/versions/0001_initial_schema.py`（既存スキーマのベースライン化、enum は `DO ... duplicate_object` で冪等作成）
+  - `backend/alembic/versions/0002_product_search_columns.py`（`tags`/`in_stock`/`current_price`/`search_vector` 追加、`pg_trgm` 拡張、トリガで `search_vector` 維持、`immutable_array_to_string` ラッパー、tsvector GIN・trigram GIN・current_price B-tree）
+- 変更:
+  - `backend/models.py`（`Product` に `tags`/`in_stock`/`current_price`/`search_vector` 追加）
+  - `analysis/models.py`（ADR-002 同期）
+  - `backend/schemas.py`（`ProductSummary`/`ProductSearchEnvelope` 追加、旧 `ProductOut` 削除）
+  - `backend/routers/products.py`（旧仕様を完全置換、新仕様で実装）
+  - `backend/main.py`（旧 `_request_validation_exception_handler` と `SEARCH_FULL_PATH` import を削除）
+  - `backend/Dockerfile`（起動時 `alembic upgrade head`）
+  - `backend/requirements.txt`（`alembic`、`testcontainers[postgresql]` 追加）
+  - `backend/tests/conftest.py`（testcontainers Postgres + Alembic ベースに置換）
+  - `backend/tests/test_product_search.py`（新仕様向けに 52 ケース全置換）
+
+## スコープクリープ確認
+
+- **削除されたコード**: `backend/main.py` の旧 `_request_validation_exception_handler`、`SEARCH_FULL_PATH` import、`backend/routers/products.py` の旧 `search_products`/`search_products_endpoint`/`_escape_like`/`Q_MAX_LENGTH`/`LIMIT_DEFAULT`/`LIMIT_MAX`/`LIKE_ESCAPE`/`SEARCH_FULL_PATH`、`backend/schemas.py` の旧 `ProductOut`、旧 `backend/tests/test_product_search.py` 全体、旧 SQLite 構成 conftest。
+- **削除の根拠**: いずれも `plan.md:106-110`（「削除対象（後方互換不要）」）に明記。新仕様の置換要件 R1（既存ハンドラの契約と異なるため置換）に対応。タスク指示書 64 行「やらないこと（ユーザー明示）：なし」と整合。
+- **タスク指示書外の削除**: なし。

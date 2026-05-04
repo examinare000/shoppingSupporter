@@ -1,0 +1,31 @@
+# AI生成コードレビュー
+
+## 結果: REJECT
+
+## サマリー
+4 件の AI 特有のデッド／到達不能／誤説明コードを検出。すべて `new` のため REJECT。
+
+## 検証した項目
+| 観点 | 結果 | 備考 |
+|------|------|------|
+| 仮定の妥当性 | ❌ | `populate_by_name=True` の効能を誤って想定 |
+| API/ライブラリの実在 | ✅ | FastAPI / pydantic v2 / Alembic API は実在し正用 |
+| コンテキスト適合 | ✅ | ルーティング・命名・ロガーは既存規約に準拠 |
+| スコープ | ⚠️ | デッド防御コードが過剰実装、`ProductOut` 取り残し |
+
+## 今回の指摘（new）
+| # | finding_id | family_tag | カテゴリ | 場所 | 問題 | 修正案 |
+|---|------------|------------|---------|------|------|--------|
+| 1 | AI-NEW-backend-schemas-L21 | dead-code | デッドコード | `backend/schemas.py:21-34` + docstring `:1-4` | 旧 router 削除で `ProductOut` の唯一の参照が消え、未使用クラスとして残存。`schemas.py` は今回変更ファイル（ボーイスカウト対象） | `ProductOut` クラス・関連 docstring・不要となる `from datetime import datetime` import を削除 |
+| 2 | AI-NEW-backend-routers-products-L93 | dead-defense | 到達不能な防御コード | `backend/routers/products.py:90-94`（+ `:24` の `ALLOWED_SORTS` import、`backend/repositories/products.py:36` の定義） | `sort: SortKey = Query(...)` は `Literal` で FastAPI が事前 422 化（`test_should_return_422_when_sort_value_not_in_allowed_set` で実証）。`if sort not in ALLOWED_SORTS:` は到達不能、コメント自体「double-check」と認めている | 90-94 行（コメント含む）を削除。`ALLOWED_SORTS` import を削除し、未参照になる `repositories/products.py:36` の `ALLOWED_SORTS` 定義も削除（`SortKey` は他用途で残す） |
+| 3 | AI-NEW-backend-repositories-products-L129 | dead-defense | 到達不能かつ未テストの防御 | `backend/repositories/products.py:129-131` | 唯一の本番呼び出し元（router）が `Query(default=1, ge=1)` で `page<1` を 422 化。テストも `page<1` ケース 0 件。コメント自体「Defense-in-depth; the handler already enforces ge=1」と自認 | 129-131 行（`if`〜`raise`＋コメント）を削除 |
+| 4 | AI-NEW-backend-schemas-L38 | misleading-comment | dead config + 誤説明コメント | `backend/schemas.py:38-41` | `serialization_alias` のみ使用しており `populate_by_name=True` は無効果。さらにコメントが pydantic v2 の `populate_by_name` 挙動を誤って説明 | `ConfigDict(from_attributes=True)` に縮約し、38-40 行の説明コメントを削除 |
+
+## 継続指摘（persists）
+（初回レビューにつき該当なし）
+
+## 解消済み（resolved）
+（初回レビューにつき該当なし）
+
+## 再開指摘（reopened）
+（初回レビューにつき該当なし）
