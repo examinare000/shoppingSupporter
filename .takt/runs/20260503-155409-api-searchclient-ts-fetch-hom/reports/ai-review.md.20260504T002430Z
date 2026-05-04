@@ -1,0 +1,40 @@
+# AI生成コードレビュー
+
+## 結果: REJECT
+
+## サマリー
+旧 `lib/mock/searchClient.ts` 削除により `MOCK_PRODUCTS`（368行）が全くの未参照デッドコードと化しているため REJECT。機能実装本体・スコープ整合・幻覚 API・既存パターン整合は良好。
+
+## 検証した項目
+| 観点 | 結果 | 備考 |
+|------|------|------|
+| 仮定の妥当性 | ✅ | SoT 不在を Plan で認識し、ADR-005 を暫定値として `endpoints.ts` 1 ファイルに局所化 |
+| API/ライブラリの実在 | ✅ | `useSWR`/`mutate`/`SWRConfig`/`provider`/`dedupingInterval` 等は SWR v2 の実 API |
+| コンテキスト適合 | ✅ | `EmptyState` のトーンを継承、`RuledDivider`/`MarginalNote` を再利用、Tailwind トークン整合 |
+| スコープ | ⚠️ | クリープ無し・縮小無し。ただし変更起因の未使用コードあり（下記） |
+
+## 今回の指摘（new）
+| # | finding_id | family_tag | カテゴリ | 場所 | 問題 | 修正案 |
+|---|------------|------------|---------|------|------|--------|
+| 1 | AI-NEW-frontend-lib-mock-products-L17 | dead-code | デッドコード | `frontend/lib/mock/products.ts:17-368` | `lib/mock/searchClient.ts` 削除により `MOCK_PRODUCTS` の唯一の参照元が消滅。grep で本番・テストともヒット 0。`app/page.test.tsx` は `productEarbuds` を inline 定義、`searchClient.test.ts` も `sampleProduct` を inline 定義しており、Plan/ADR-005 の「テスト用フィクスチャとして残す」前提が実態として活用されていない。Policy「今回の変更により未使用になったコード → ブロッキング」に該当 | (A) `frontend/lib/mock/products.ts` を削除する。または (B) `app/page.test.tsx` の `productEarbuds` と `searchClient.test.ts` の `sampleProduct` を `MOCK_PRODUCTS` から import する形に書き換え、宣言通りの fixture として実際に使われる状態にする |
+
+## 継続指摘（persists）
+| # | finding_id | family_tag | 前回根拠 | 今回根拠 | 問題 | 修正案 |
+|---|------------|------------|----------|----------|------|--------|
+| - | - | - | - | - | 初回レビューのため該当なし | - |
+
+## 解消済み（resolved）
+| finding_id | 解消根拠 |
+|------------|----------|
+| - | 初回レビューのため該当なし |
+
+## 再開指摘（reopened）
+| # | finding_id | family_tag | 解消根拠（前回） | 再発根拠 | 問題 | 修正案 |
+|---|------------|------------|----------------|---------|------|--------|
+| - | - | - | - | - | 初回レビューのため該当なし | - |
+
+## 参考（非ブロッキング・Warning）
+- `frontend/lib/api/searchClient.ts:26` の `as Product[]` は runtime 検証なし。decision-log #5 の判断は妥当だが SoT 確定後に zod 等の検討余地あり。
+- `frontend/components/feedback/SearchErrorState.tsx:25-27` `describeError` の固定文言フォールバックは、Error 以外の error 型に対する UI 分岐として妥当だが、対応テストケース無し。
+- `frontend/lib/api/searchClient.ts:17` の `{ method: 'GET' }` は fetch のデフォルトと重複（実害なし）。
+- `frontend/package.json` の dependencies/devDependencies がアルファベット順に並び替えられている（`npm install` 副作用）。本タスクの 3 点スコープ外の差分。

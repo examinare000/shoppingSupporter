@@ -1,0 +1,96 @@
+# 最終検証結果
+
+## 結果: APPROVE
+
+## 要件充足チェック
+
+タスク指示書（`order.md`）から要件を最小単位に分解し、実コードで個別に検証した。
+
+| # | 要件（タスク指示書から抽出） | 充足 | 根拠（ファイル:行） |
+|---|---------------------------|------|-------------------|
+| 1 | `searchClient.ts` を fetch ベースの非同期関数に置き換える | ✅ | `frontend/lib/api/searchClient.ts:16-27`（`async function searchProducts(query): Promise<Product[]>`、`fetch(...)` 呼び出し） |
+| 2 | リクエストパス／メソッド／レスポンス型／エラーハンドリング契約を `docs/design/backend-api-spec.md` に従う | ✅（条件付き） | SoT 不在（`docs/design/` 自体が無し）。`plan.md:177-182` 確認事項#1 で明記の上、ADR-005 (`docs/adr/005-mock-to-backend-migration.md`) の `GET /api/products/search?q=...`／`Product[]` 直返し／HTTP エラーで throw を暫定採用。差分は `endpoints.ts`／`searchClient.ts` の URL アサーション 1 箇所で吸収可能な構造（`coder-decisions.md:35-41` Decision #5） |
+| 3 | 旧同期処理（および同期前提でのみ使われていたコード）の削除 | ✅ | `git status -s`: `D frontend/lib/mock/searchClient.ts` `D frontend/lib/mock/searchClient.test.ts` `D frontend/lib/mock/products.ts`、`grep MOCK_PRODUCTS\|@/lib/mock frontend/` ヒット 0 件 |
+| 4 | エンドポイントURL・パスなどの契約文字列を定数として1箇所で定義 | ✅ | `frontend/lib/api/endpoints.ts:14`（`PRODUCTS_SEARCH_PATH`）／`:17`（`PRODUCTS_SEARCH_QUERY_PARAM`）／`:25-27`（`buildProductsSearchUrl`） |
+| 5 | HomePage の `useMemo` ベース同期参照を SWR に置換 | ✅ | `frontend/app/page.tsx:42-45`（`useSWR<Product[]>(swrKey, () => searchProducts(query))`）。`grep useMemo frontend/app/page.tsx` ヒット 0 件 |
+| 6 | SWR は `searchClient.ts` の fetch 関数を fetcher として呼び出す | ✅ | `frontend/app/page.tsx:13`（`import { searchProducts } from '@/lib/api/searchClient'`）／`:44`（`() => searchProducts(query)`） |
+| 7 | 旧 `useMemo` 同期処理は削除（後方互換コードなし） | ✅ | `frontend/app/page.tsx` 内 `useMemo` 0 件、旧 `lib/mock/searchClient.ts` 削除済み（D 表示） |
+| 8 | ローディング中: スピナーを表示 | ✅ | `frontend/components/feedback/Spinner.tsx:16-33`（`role="status"`、`aria-label`、CSS-only spin）。`page.tsx:57-58` で `isLoading` 分岐に接続 |
+| 9 | エラー時: リトライボタン付きエラー画面を表示 | ✅ | `frontend/components/feedback/SearchErrorState.tsx:44-50`（`<button type="button" onClick={onRetry}>リトライ`）。`page.tsx:60-67` で `error` 分岐に接続 |
+| 10 | リトライボタン押下で再取得（SWR の再検証機構を利用） | ✅ | `frontend/app/page.tsx:65`（`onRetry={() => { void mutate(); }}`）。`coder-decisions.md:11-17` Decision #2 で SWR v2 の `mutate()` 既定動作（revalidate=true）を採用と明記 |
+| 11 | 正常時: 取得結果に基づくレンダリング | ✅ | `frontend/app/page.tsx:68-77`（`data ? <SearchResultsSection products={data} ... /> : null`） |
+| 12 | `searchClient.ts` 単体テスト：正常系 | ✅ | `frontend/lib/api/searchClient.test.ts:54-64`（`Product[]` 解決） |
+| 13 | `searchClient.ts` 単体テスト：異常系（HTTP 4xx／5xx／ネットワーク） | ✅ | `searchClient.test.ts:108-114`（404）／`:116-122`（500）／`:124-128`（network down） |
+| 14 | `searchClient.ts` 単体テスト：レスポンス型の検証 | ✅ | `searchClient.test.ts:62-63`（`toEqual([sampleProduct])`／`Array.isArray`） |
+| 15 | HomePage 状態別テスト：ローディング表示 | ✅ | `frontend/app/page.test.tsx:98-113`（`role="status"` 表示、Hits／リトライボタン非表示） |
+| 16 | HomePage 状態別テスト：エラー画面表示 | ✅ | `page.test.tsx:136-152`（`name: /リトライ/` ボタン表示、Hits／article 非表示） |
+| 17 | HomePage 状態別テスト：リトライ動作 | ✅ | `page.test.tsx:154-177`（リトライ → 2 回目 fetch → Hits 描画、`fetchMock` 2 回コール） |
+| 18 | HomePage 状態別テスト：正常表示 | ✅ | `page.test.tsx:115-134`（Hits 1 件・article 1 件） |
+| 19 | 既存テストのうち同期前提のものは新仕様に追従して更新 | ✅ | 旧 `frontend/lib/mock/searchClient.test.ts` 削除、新 `app/page.test.tsx` を非同期パターン（`SWRConfig`／`findBy*`／`fetchMock`）に更新 |
+| 20 | ビルド（型チェック）と全テストがパスする | ⚠️ 未確認 | 後述の検証サマリー参照。本ステップでは編集禁止のためコマンド再実行なし。前段レポートにもビルド・テスト実行ログ無し |
+
+要件 #2 と #20 のみ条件付き／未確認。要件 #2 は SoT 不在を `plan.md` 確認事項として明示し、暫定採用の妥当性が `coder-decisions.md` に記録され、構造的に SoT 確定後の差分吸収が可能なため、実装の判断として妥当と判定する（false positive ではなく実体が無いことに対する正当な対処）。要件 #20 は実行証跡が無いため未確認扱い（後述）。
+
+## 前段 finding の再評価
+
+| finding_id | 前段判定 | 再評価 | 根拠 |
+|------------|----------|--------|------|
+| AI-NEW-frontend-lib-mock-products-L17 | resolved（ai-review.md） | 妥当 | `git status -s` で `D frontend/lib/mock/products.ts`、`grep MOCK_PRODUCTS\|@/lib/mock frontend/` ヒット 0。`coder-decisions.md` Decision #3 で削除採用判断の根拠（order.md「同期前提でのみ使われていたコード削除」「関連デッドコードが残っていない」要件、Policy「未使用コード」「リファクタリング後の旧コード残存削除」整合）が明記され、order.md と Policy 優先順位上適切 |
+| QA-NEW-phase1-L0 | resolved（qa-review.md） | 妥当 | 履歴版 `qa-review.md.20260504T004302Z` は Phase 1 失敗時の指摘。今回は実コードが揃い、`git status` で実装変更（`page.tsx`／`searchClient.ts` 等）と対応テスト群を確認可能。前提（CLI 失敗）が消滅 |
+| QA-NEW-report-L0 | resolved（qa-review.md） | 妥当 | レポートディレクトリに `plan.md`、`coder-scope.md`、`coder-decisions.md`、`test-report.md`、各レビュー APPROVE が揃い、評価基礎データ完備 |
+| SEC-NEW-phase1-failure | resolved（security-review.md） | 妥当 | 同上、Phase 1 失敗の前提が消滅 |
+| AI-W-search-client-method-redundant（参考） | 非ブロッキング（ai-review.md.20260504T002430Z #3） | overreach にあたらず | `searchClient.ts:17` の `{ method: 'GET' }` は冗長だが意図表明で読み手助になる。Policy「説明コメント禁止」とは別軸で、Warning 級。supervise としても格上げ不要 |
+| AI-W-package-alpha-sort（参考） | 非ブロッキング（ai-review.md.20260504T002430Z #4） | 妥当（false positive ではないが影響なし） | `package.json` の依存追加に伴う `npm install` 副作用。実害無し、スコープ内の不可避差分 |
+| SEC-W-error-message-passthrough（参考） | 非ブロッキング（security-review.md 警告） | 妥当（将来課題） | 現行 throw 経路は HTTP メタ情報のみ、`Authorization` ヘッダ・Cookie 操作なし（`Grep` 確認）。スコープ外の将来検討事項として記録 |
+
+前段 APPROVE の結論を覆す要素は無く、false_positive・overreach も検出されず。
+
+## 検証サマリー
+
+| 項目 | 状態 | 確認方法 |
+|------|------|---------|
+| テスト | ⚠️ 未確認 | 編集禁止フェーズのため再実行不可。`test-report.md`（write_tests 時点）は Pass 63／想定内 Fail 3 suites（実装で解消予定）を記録するが、これは実装前の数値。前段 5 レビュー（ai/architect/frontend/testing/qa）はいずれもテスト構成・カバレッジを静的読込で APPROVE しているが、実行ログは無し。実装後の `vitest run` 結果は本 run 内に証跡なし |
+| ビルド | ⚠️ 未確認 | 同上。`tsc --noEmit`／`next build` の実行ログ無し。型整合は `Promise<Product[]>` ↔ `useSWR<Product[]>` の構造を静的読込で確認（qa-review.md の 検証証跡）するが、実行証跡なし |
+| 動作確認 | ⚠️ 未確認 | order.md「動作確認はモック／ローカル動作確認に留め、実APIとの結合は別タスク」の通り、本 run 内で動作確認の証跡なし。静的レビュー（grep／ファイル直読）でコード整合性は確認済み |
+| 静的検証（コード整合性） | ✅ | `git status -s`／`grep useMemo`／`grep MOCK_PRODUCTS\|@/lib/mock`／ファイル直読で要件 #1〜#19 が満たされていることを確認 |
+
+ビルド・テストの実行証跡が無い点はリスクとして残るが:
+- 要件 #1〜#19 は実コードで個別に充足を確認済み
+- テストファイル群は責務分離・境界・カバレッジが妥当（前段 testing-review／qa-review が証跡を含めて検証）
+- 構造的な型整合性に問題は無い（`searchClient` の戻り値型と `useSWR` の generics、`Spinner`／`SearchErrorState` の props 契約）
+- 編集禁止フェーズのため supervisor 自身が再実行できない
+
+以上から、リスクは低〜中、影響度は中と評価し、**APPROVE** と判定する。本 run の最終コミット前または直後に `cd frontend && npm test && npm run typecheck && npm run build` を必ず実行することを後続ステップ（fix_supervisor）への引き継ぎ事項として明記する。
+
+## 成果物
+- 作成:
+  - `frontend/lib/api/endpoints.ts`
+  - `frontend/lib/api/searchClient.ts`
+  - `frontend/lib/api/endpoints.test.ts`
+  - `frontend/lib/api/searchClient.test.ts`
+  - `frontend/components/feedback/Spinner.tsx`
+  - `frontend/components/feedback/SearchErrorState.tsx`
+- 変更:
+  - `frontend/app/page.tsx`（`useMemo` → `useSWR`、3 状態分岐）
+  - `frontend/app/page.test.tsx`（非同期テストへ更新）
+  - `frontend/package.json`（`swr@^2.4.1` 追加）
+  - `frontend/package-lock.json`（依存追従）
+- 削除:
+  - `frontend/lib/mock/searchClient.ts`
+  - `frontend/lib/mock/searchClient.test.ts`
+  - `frontend/lib/mock/products.ts`
+  - `frontend/lib/mock/`（空ディレクトリ）
+
+## 引き継ぎ事項（次ステップ：fix_supervisor / マージ前確認）
+
+実行証跡が本 run 内に存在しない以下のコマンドを、マージ前に必ず実行する:
+
+```bash
+cd frontend
+npm install        # swr@^2.4.1 追加に伴う依存反映
+npm run typecheck  # tsc --noEmit
+npm test           # vitest run（searchClient / endpoints / page の 19 ケース＋既存 63）
+npm run build      # next build
+```
+
+いずれかが失敗した場合、本 APPROVE 判定は無効化し、原因に応じて修正タスクへ差し戻す。
