@@ -1,13 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import useSWR from 'swr';
 import { Logo } from '@/components/branding/Logo';
 import { Masthead } from '@/components/editorial/Masthead';
 import { RuledDivider } from '@/components/editorial/RuledDivider';
 import { HeroSearch } from '@/components/search/HeroSearch';
 import { SearchResultsSection } from '@/components/search/SearchResultsSection';
+import { Spinner } from '@/components/feedback/Spinner';
+import { SearchErrorState } from '@/components/feedback/SearchErrorState';
 import { useImagePriority } from '@/lib/hooks/useImagePriority';
-import { searchProducts } from '@/lib/mock/searchClient';
+import { searchProducts } from '@/lib/api/searchClient';
+import { buildProductsSearchUrl } from '@/lib/api/endpoints';
+import type { Product } from '@/types/product';
 
 /**
  * トップページ。
@@ -17,19 +22,27 @@ import { searchProducts } from '@/lib/mock/searchClient';
  *   理由: 旧版は検索前から全件結果を並べていたが、Masthead と HeroSearch との間で
  *   視覚的ノイズが多くなり「ダサい」状態だった。表紙ティザー風に、検索が起きてから
  *   結果セクションが現れる方が情報設計として整う。
- * - useImagePriority はクライアント側でしか動かないため、page.tsx に 'use client' を付ける。
- *   サーバーコンポーネント分割は今は不要（モック検索のため fetch 等の I/O も無く、
- *   全体が CSR で十分速い）。
+ * - データ取得は SWR を採用。fetch ベースの非同期取得で、ローディング／エラー／成功の
+ *   3 状態を `Spinner` / `SearchErrorState` / `SearchResultsSection` に分岐させる。
+ *   SWR の `key` を「空クエリのとき null」にすることで、検索前の不要 fetch を抑止する。
+ * - エラー時のリトライは `mutate()` を直接呼ぶ。同じ key で再検証が走るため、
+ *   ユーザーがクエリを再入力する手間を省ける。
  */
 export default function HomePage() {
   const [query, setQuery] = useState('');
   const { priority, moveUp, moveDown, reset } = useImagePriority();
 
-  // searchProducts は純粋関数。query 変更時のみ再計算する
-  const results = useMemo(() => searchProducts(query), [query]);
-
-  // 空クエリでは結果セクションを描画しない（検索前は表紙ティザーに徹する設計）
+  // 空クエリでは fetch を発火させない（SWR の key=null によるスキップ）
   const hasQuery = query !== '';
+  const swrKey = hasQuery ? buildProductsSearchUrl(query) : null;
+
+  // fetcher は searchProducts（fetch ベース）。key は URL 文字列だが、searchProducts は
+  // `query` 文字列を受け取る契約のため、closure 経由で渡す（HomePage の再描画ごとに
+  // key と fetcher が同期して更新される）。
+  const { data, error, isLoading, mutate } = useSWR<Product[]>(
+    swrKey,
+    () => searchProducts(query),
+  );
 
   return (
     <main className="relative z-10 min-h-screen">
@@ -41,14 +54,27 @@ export default function HomePage() {
         {hasQuery && (
           <>
             <RuledDivider variant="single" className="my-8" />
-            <SearchResultsSection
-              query={query}
-              products={results}
-              priority={priority}
-              onMoveUp={moveUp}
-              onMoveDown={moveDown}
-              onResetPriority={reset}
-            />
+            {isLoading ? (
+              <Spinner />
+            ) : error ? (
+              <SearchErrorState
+                query={query}
+                error={error}
+                onRetry={() => {
+                  // SWR の再検証を起動。同 key を維持したまま fetcher が再実行される
+                  void mutate();
+                }}
+              />
+            ) : data ? (
+              <SearchResultsSection
+                query={query}
+                products={data}
+                priority={priority}
+                onMoveUp={moveUp}
+                onMoveDown={moveDown}
+                onResetPriority={reset}
+              />
+            ) : null}
           </>
         )}
 

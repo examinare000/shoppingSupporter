@@ -1,0 +1,74 @@
+# テスト品質レビュー（1回目）
+
+## 結果: APPROVE
+
+## サマリー
+タスクの3点スコープ（searchClient の fetch 化／HomePage の 3 状態描画／ローディング・エラー UI）に対し、必要な振る舞いはすべて単体・統合テストでカバーされている。境界は `global.fetch` のみに置き、SWR 本体・SearchResultsSection・Spinner・EmptyState などの実コンポーネントを実マウントしているため、shallow モック起因のマウント時破綻も検出可能。Given-When-Then の構造、テスト独立性（`vi.unstubAllGlobals` ＋ `SWRConfig provider: () => new Map()` ＋ `localStorage.clear`）、再現性（時間・乱数依存なし）、命名（振る舞い記述）はすべて基準を満たす。新規 finding は無し、過去 testing-review レポートも存在しない（このステップ初回実行）。
+
+## 前回 finding 状況
+
+| finding_id | 状態 | 根拠 |
+|------------|------|------|
+| - | - | testing-review レポートが Report Directory に存在しないため、前回 open findings は無し（初回実行） |
+
+`ai-review.md` 系列は別レビューアの履歴であり、testing-review の指摘継承対象ではない。`AI-NEW-frontend-lib-mock-products-L17`（dead-code）は ai-review が `resolved` と判定済みで、実体（`frontend/lib/mock/products.ts`）も `frontend/lib/mock/` ディレクトリも消失していることを `find frontend -name "*.test.*"` の結果から再確認した（`frontend/lib/mock/` 配下に該当パスなし）。
+
+## 検証した項目
+
+| 観点 | 結果 | 根拠 |
+|------|------|------|
+| 計画観点のカバレッジ | ✅ | `test-report.md` の3ファイル × 想定テストケースが実コードと突合一致（endpoints 5 / searchClient 8 / page 6）。`order.md` の「fetch 呼び出しの正常系／異常系／レスポンス型」「HomePage の状態別レンダリング・リトライ動作」を全て検証 |
+| Given-When-Then 構造 | ✅ | `searchClient.test.ts:54-64`「Given バックエンドが…→ When searchProducts を呼ぶ → Then Product[] として返る」の3段は明示。他の test も Arrange-Act-Assert を分けたコメント／空行で構造化されている |
+| 独立性 | ✅ | `searchClient.test.ts:45-52` および `page.test.tsx:64-72` で `beforeEach` で fetchMock を新規作成、`afterEach` で `vi.unstubAllGlobals()`。`page.test.tsx:65` で `localStorage.clear()`、`SWRConfig provider: () => new Map()` でテスト毎にキャッシュ分離 |
+| 再現性 | ✅ | `Date.now` / `Math.random` / 固定 sleep に依存するコードはゼロ。`mockResolvedValueOnce` / `mockRejectedValueOnce` で各テストの fetch 応答を明示的に固定 |
+| 命名規約 | ✅ | 「正常系: レスポンス JSON を Product[] として解決する Promise を返す」「検索 → ローディング中はスピナー (role="status") が表示される」など、期待される振る舞いを記述する命名 |
+| モック粒度（外部依存のみ） | ✅ | テスト対象の内部実装（`searchProducts` 内の if 分岐、HomePage 内の `useSWR` ロジック）はモックせず、境界の `global.fetch` のみスタブ。SWR 本体・SearchResultsSection・Spinner は実マウント |
+| フィクスチャ独立性 | ✅ | `sampleProduct` / `productEarbuds` は module スコープで定義されているが、テスト内で mutate していない（`toEqual` で値比較のみ）。共有して変更する反パターンに該当しない |
+| 外部契約: path / method / query 入力位置 | ✅ | `endpoints.test.ts:14-50` でパス `/api/products/search` を 5 ケースで固定、`q=` パラメータ位置とエンコード規約（`%20` / encodeURIComponent）を検証。`searchClient.test.ts:66-86` で「fetch 第 1 引数 = `buildProductsSearchUrl(query)`」「method='GET'」をアサート。GET なので body 検証は対象外 |
+| envelope を request 契約へ流用しないか | ✅ | リクエストはクエリ文字列のみで body を持たないため、envelope (`{data: ...}`) を request 側に流用するルートが構造的に存在しない。レスポンス側の envelope 不在は `searchClient.test.ts:54-64` で `result === [sampleProduct]`（配列直返し）を `toEqual` 完全一致で検証しており、`{data: [...]}` 形式の envelope を返す実装は通らない |
+| 到達経路（policy: 到達経路のリグレッション） | ✅ | `page.test.tsx:104-105, 120-121, 162-163` で `getByRole('searchbox')` → `getByRole('button', { name: /検索する/ })` の実 UI を経由して検索を発火。route から HomePage を render し SearchForm 経由で機能に到達する経路を検証 |
+| UI ライブラリ統合のリグレッション（SWR） | ✅ | `page.test.tsx:43-58` で `<SWRConfig><HomePage /></SWRConfig>` を実マウントし、`useSWR`・`mutate` の実 state machine（loading→error→mutate→loading→success）を `page.test.tsx:154-177` のリトライテストで通している |
+| 再取得ループのリグレッション | ✅ | `page.test.tsx:74-96` で初期表示 `expect(fetchMock).not.toHaveBeenCalled()`（SWR key=null による発火抑止を回帰固定）、`page.test.tsx:115-134` で成功時 `toHaveBeenCalledTimes(1)`、`page.test.tsx:154-177` でリトライ時 `toHaveBeenCalledTimes(2)` を検証 |
+| 境界値・同値分割 | ✅ | endpoints: ASCII / 日本語 / 空白 / 特殊文字 / 空文字。searchClient: 正常応答 / 空配列 / 4xx / 5xx / fetch reject。HomePage: 初期 / loading / 成功 / 失敗 / リトライ / 0 件。各同値クラスの代表値と境界（empty、エラー境界）を網羅 |
+| 設計判断との整合 | ✅ | `coder-decisions.md` 1〜5 の判断（SWR key=URL 文字列、retry=bare mutate、MOCK_PRODUCTS 削除、Spinner ラベル固定、Product[] 直返し）はすべてテストの assertion と整合。意図的判断を FP 指摘していない |
+
+## 今回の指摘（new）
+
+| # | finding_id | family_tag | カテゴリ | 場所 | 問題 | 修正案 |
+|---|------------|------------|---------|------|------|--------|
+| - | - | - | - | - | 該当なし | - |
+
+## 継続指摘（persists）
+
+| # | finding_id | family_tag | 前回根拠 | 今回根拠 | 問題 | 修正案 |
+|---|------------|------------|----------|----------|------|--------|
+| - | - | - | - | - | 該当なし（前回レポート不在） | - |
+
+## 解消済み（resolved）
+
+| finding_id | 解消根拠 |
+|------------|----------|
+| - | 前回レポート不在のため対象なし |
+
+## 再開指摘（reopened）
+
+| # | finding_id | family_tag | 解消根拠（前回） | 再発根拠 | 問題 | 修正案 |
+|---|------------|------------|----------------|---------|------|--------|
+| - | - | - | - | - | 該当なし | - |
+
+## 補足（非ブロッキング・参考情報）
+
+REJECT 基準には該当しないが、将来テストを拡張する際の参考として記録する。Policy「APPROVE + 警告」「APPROVE + 提案」は禁止のため、この欄は判定根拠ではなく純粋な参考情報である。
+
+| 項目 | 内容 | 判断 |
+|------|------|------|
+| `SearchErrorState.tsx:24-27` の `describeError` 分岐 | `error instanceof Error && error.message` の偽側（非 Error / 空メッセージ Error）の分岐は HomePage 統合テスト経由では網羅していない（`new Error('network down')` のみ）。SWR が非 Error を throw する経路は実装上ほぼ無いが、ユニットテストとしての完全性は担保していない | スコープ外（変更ファイル内の論理分岐だが、本タスクのスコープ「3 状態 UI」は満たしており追加要求しない） |
+| 再レンダ安定性 | 成功テストで `toHaveBeenCalledTimes(1)` 後の `rerender` を行っていない。SWR key 変化なし＋無関係 state（`useImagePriority`）の更新が再 fetch を呼ばないことは構造で担保されているが、明示テストはない | Policy「1回呼ばれたことだけを確認し、再レンダ後の安定性を見ていない」は警告レベル。今回 SWR の `dedupingInterval: 0` を設定しているため、警告は記録のみ |
+| フィクスチャのファクトリ化 | `sampleProduct` / `productEarbuds` はリテラル定義。knowledge ファイル §テストフィクスチャ設計のファクトリ関数パターンを採用していないが、現状 mutate していないため独立性は保たれている | Policy「テストファイルの長さや重複は原則 Warning」。実害（フレーク／検知漏れ／回帰検出不能）が再現しないため記録のみ |
+
+## 判定根拠
+
+- ブロッキング（REJECT）基準：テストがない新しい振る舞い・リグレッションテスト欠如・実装詳細モック・エラー握りつぶし等 — **該当なし**
+- 外部契約（GET /api/products/search?q=...）の path / method / query 入力位置はすべてテストで検証されている
+- レスポンス envelope を request 契約へ誤って流用するルートは構造的に存在せず、レスポンス直返し契約も配列完全一致で固定されている
+- `new` または `persists` の問題が 1 件以上ある場合のみ REJECT 可能。今回は 0 件のため APPROVE
