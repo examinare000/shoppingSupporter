@@ -1,0 +1,18 @@
+# 決定ログ
+
+## 1. `TestEndpointQueryParameterContract::test_should_read_q_from_query_string_not_body` の呼び出し方を `client.get(json=...)` から `client.request("GET", ..., json=...)` に変更
+
+- **背景**: 既存テストは `client.get(ENDPOINT, json={"q": "apple"})` で「GET ボディに `q` を入れても拾われない」ことを検証しようとしていたが、`httpx>=0.20`（現環境 0.28.1）の `Client.get` は `json` 引数を受け付けず `TypeError: TestClient.get() got an unexpected keyword argument 'json'` で失敗する。テスト自身のバグであり、実装側の責務ではない。
+- **検討した選択肢**:
+  1. テストを削除して契約を verify しない
+  2. 実装側で「ボディがあると `[]` を返す」ような分岐を入れる
+  3. `client.request("GET", ENDPOINT, json=...)` で書き換えてテストの意図（負契約: ボディは無視される）を保つ
+- **理由**: 選択肢1は policy「query / path parameter は body に流用しない」の契約検証を失う。選択肢2は order.md にない挙動を実装に追加することになり、`Coder` 行動規範の「タスク指示書にない既存機能の構造変更を行わない」に反する。選択肢3は httpx の API 変更に追随するだけのテスト側修正で、検証する契約と振る舞いは write_tests レポートに記録された意図と完全に一致する。
+
+## 2. `RequestValidationError` ハンドラのパスガードに使う `/api/products/search` を定数化（`SEARCH_FULL_PATH`）
+
+- **背景**: `main.py` の `RequestValidationError` ハンドラと `routers/products.py` のルーティング定義の双方で同じパス文字列を扱う必要がある。policy「契約文字列を新規導入する場合は定数として1箇所で定義」に従う必要がある。
+- **検討した選択肢**:
+  1. `main.py` 側に文字列リテラルを直接書く
+  2. `routers/products.py` に `ROUTER_PREFIX` / `SEARCH_PATH` / `SEARCH_FULL_PATH` を宣言して `main.py` から import する
+- **理由**: 選択肢2なら `APIRouter(prefix=ROUTER_PREFIX)` と `@router.get(SEARCH_PATH)` も同じ定数を参照するため、ルーティング・ハンドラ・パスガードの3者が常に同期する。リテラル分散による typo 起因のバグを構造的に防げる。

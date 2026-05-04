@@ -82,8 +82,10 @@ class Product(Base):
     in_stock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     current_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    # Maintained by a Postgres BEFORE INSERT/UPDATE trigger; see
-    # backend/alembic/versions/0002_product_search_columns.py.
+    # Maintained by a Postgres BEFORE INSERT/UPDATE trigger (see migration
+    # 0002). A GENERATED column would be cleaner, but `to_tsvector(regconfig,
+    # text)` is STABLE not IMMUTABLE so it cannot be used in a generated
+    # column expression.
     search_vector: Mapped[Optional[str]] = mapped_column(TSVECTOR, nullable=True)
 
     site_products: Mapped[List["EcSiteProduct"]] = relationship(back_populates="product")

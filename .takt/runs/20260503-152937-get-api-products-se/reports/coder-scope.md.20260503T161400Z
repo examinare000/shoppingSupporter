@@ -1,0 +1,24 @@
+# 変更スコープ宣言
+
+## タスク
+`GET /api/products/search` エンドポイントの実装（あいまい検索 + 関連度順 + 200/`[]` フォールバック）。
+
+## 変更予定
+| 種別 | ファイル |
+|------|---------|
+| 変更 | `backend/main.py` |
+| 変更 | `backend/models.py` |
+| 変更 | `backend/requirements.txt` |
+| 変更 | `analysis/models.py` |
+| 作成 | `backend/schemas.py` |
+| 作成 | `backend/routers/__init__.py` |
+| 作成 | `backend/routers/products.py` |
+
+## 推定規模
+Medium
+
+## 影響範囲
+- バックエンド API（`/api/products/search` を新設）
+- `Product` モデル（`description` カラム追加。Backend / Analysis 両方を ADR-002 に従って同期）
+- `RequestValidationError` ハンドラ（`/api/products/search` パスに限定して 200+`[]` に変換）
+- フロントエンド・スクレイパ・DB 初期化スクリプトは変更なし
