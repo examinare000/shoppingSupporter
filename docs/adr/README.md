@@ -12,3 +12,4 @@
 - [ADR-006: 高度な機能（還元率反映・履歴・予測）のロードマップ](006-advanced-features-roadmap.md)
 - [ADR-007: ユーザー認証戦略の決定](007-authentication-strategy.md)
 - [ADR-008: データベースサービスの選定](008-database-selection.md)
+- [ADR-009: backend/ を api/ に統合し Vercel + Neon 構成を正本化](009-backend-to-api-consolidation.md)
