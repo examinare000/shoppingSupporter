@@ -21,7 +21,7 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 
 - フロントエンド UI（ヒーロー検索 / 検索結果 / 画像優先度設定）は実装済み
 - バックエンド: モデル定義・公式 API クライアント・Cron 雛形に加え、`GET /api/products/search`（FTS + pg_trgm）と Alembic マイグレーション（0001 初期スキーマ + 0002 検索カラム）を実装済み
-- **Next Step**: Phase 1 残タスク（認証 / Card / UserProfile / OpenAPI 型同期）に着手予定。詳細は `docs/plans/phase1-foundation.md` を参照
+- **Next Step**: Phase 1 残タスク（T-03/04/05/06/08 と OpenAPI 型同期 T-09）。詳細は `docs/plans/phase1-foundation.md` を参照
 
 ## 今後のロードマップ
 
@@ -29,7 +29,7 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 
 
 ### Phase 1: モック脱却とパーソナライズ基盤
-- `lib/mock/` から実バックエンド API への接続
+- フロント fetch 接続は完了済み（残: `UserProfile` / `Card` 連携と検索レスポンスへの `Listing` 同梱／T-08）
 - `UserProfile` / `Card` 連携によるユーザー固有の還元率反映
 - バックエンドでの実質価格計算ロジックの実装
 
@@ -62,15 +62,16 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 │   ├── components/
 │   │   ├── branding/          #     pricehack ワードマーク
 │   │   ├── editorial/         #     新聞メタファのエディトリアル装飾
+│   │   ├── feedback/          #     ローディング / エラー UI（Spinner / SearchErrorState）
 │   │   ├── icons/             #     サイト識別グリフ
 │   │   ├── results/           #     商品サムネイル等の結果表示
 │   │   ├── search/            #     ヒーロー・検索フォーム・結果セクション・出品行
 │   │   └── settings/          #     画像取得優先度の並び替え UI
 │   ├── lib/
+│   │   ├── api/               #     HTTP 検索クライアント（fetch + URL 組み立て）
 │   │   ├── format/            #     通貨・ポイント・%の日本語ロケール整形
 │   │   ├── hooks/             #     useImagePriority（LocalStorage 永続化）
 │   │   ├── image/             #     画像取得優先度の解決ロジック
-│   │   ├── mock/              #     モック商品とクライアントサイド検索
 │   │   └── pricing/           #     実質価格算出・出品ソート
 │   ├── types/                 #   フロントエンド共通型 (Product / Listing 等)
 │   └── test/                  #   Vitest セットアップ
@@ -102,7 +103,7 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 - `YAHOO_CLIENT_ID` — Yahoo! JAPAN Client ID
 - `AMAZON_ACCESS_KEY` / `AMAZON_SECRET_KEY` / `AMAZON_PARTNER_TAG` — Amazon PA-API 認証情報
 
-> フロントエンド単体（モック駆動）で UI を確認するだけなら、上記の環境変数は不要。
+> フロントエンド単体（`/api/products/search` を fetch しない場合）で UI を確認するだけなら、上記の環境変数は不要。
 
 ### ローカル開発
 
