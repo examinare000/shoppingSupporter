@@ -1,111 +1,109 @@
-# バックエンド API 設計書 (Phase 0)
+# バックエンド API 仕様
 
-フロントエンドのモック駆動から実バックエンド接続への移行に必要な、主要エンドポイントの設計を定義する。
+最終更新: 2026-05-04（ADR-009 統合反映）
+
+実装は `api/main.py`（FastAPI）配下。ルートは `vercel.json` のリライトで `/api/(.*) → /api/main.py` に集約され、FastAPI 内部でパスマッチする。
 
 ## 1. 概要
 
 - **Base URL**: `/api`
-- **形式**: JSON
-- **認証**: 現時点では検索等は認証不要。将来的に `Authorization: Bearer <token>` を使用。
+- **形式**: JSON（フィールド名は camelCase）
+- **認証**: 検索系は当面公開エンドポイント。ユーザー文脈付きの API は `Authorization: Bearer <JWT>`（ADR-007）。
 
-## 2. エンドポイント
+## 2. 実装済みエンドポイント
 
-### 2.1. 商品検索
+### 2.1. ヘルスチェック
+`GET /api/health`
+
+レスポンス: `{"status": "ok"}`
+
+### 2.2. 商品検索
 `GET /api/products/search`
 
-クエリに基づいて DB から商品を検索し、各 EC サイトの出品情報を含めて返却する。
+実装: `api/routers/products.py` + `api/repositories/products.py`。Postgres FTS（`tsvector` + `websearch_to_tsquery`）と pg_trgm（trigram 類似度）を OR で結合し、relevance はその合算でランキングする。スキーマは `alembic/versions/0002_product_search_columns.py` 参照。
 
 **Query Parameters:**
-- `q` (string, required): 検索キーワード。JAN コードまたは商品名。
-- `sort` (string, optional): ソート順。 `effectivePriceAsc` (デフォルト), `priceAsc`, `pointsDesc`。
+
+| 名前 | 型 | 必須 | 制約 | 説明 |
+|---|---|---|---|---|
+| `q` | string | ○ | 1〜100 文字 | 検索キーワード |
+| `inStock` | boolean | × | true / false | 在庫フィルタ。未指定なら無効 |
+| `priceMin` | int | × | 0 以上 | 価格下限（包含） |
+| `priceMax` | int | × | 0 以上、`priceMin` 以上 | 価格上限（包含） |
+| `sort` | string | × | `relevance`（既定）/ `price_asc` / `price_desc` / `newest` | 並び順 |
+| `page` | int | × | 1 以上 | ページ番号（1 始まり） |
+
+ページサイズは固定 10 件（`api/repositories/products.py` の `PAGE_SIZE`）。
 
 **Response (200 OK):**
 ```json
 {
-  "results": [
+  "items": [
     {
       "id": "uuid",
       "name": "商品名",
-      "janCode": "45XXXXXXXXXXX",
+      "description": "...",
       "imageUrl": "https://...",
-      "category": "Electronics",
-      "listings": [
-        {
-          "site": "amazon",
-          "url": "https://amazon.co.jp/...",
-          "price": 10000,
-          "shippingFee": 0,
-          "points": 100,
-          "isAvailable": true
-        },
-        {
-          "site": "rakuten",
-          "url": "https://item.rakuten.co.jp/...",
-          "price": 10500,
-          "shippingFee": 0,
-          "points": 500,
-          "isAvailable": true
-        }
-      ]
+      "tags": ["tag1", "tag2"],
+      "inStock": true,
+      "currentPrice": 1500
     }
   ],
-  "total": 1
+  "page": 1,
+  "totalPages": 3,
+  "totalCount": 25
 }
 ```
 
-### 2.2. 商品詳細 (価格推移含む)
-`GET /api/products/{id}`
+`totalPages` は `ceil(totalCount / 10)`。`totalCount` は 0 のとき `totalPages` も 0。
 
-特定の商品（UUID または JAN）の詳細情報と、現在の最新価格情報を取得する。
+**バリデーション失敗 (422):**
 
-**Response (200 OK):**
-```json
-{
-  "id": "uuid",
-  "name": "商品名",
-  "janCode": "45XXXXXXXXXXX",
-  "listings": [...],
-  "description": "..."
-}
-```
+以下はすべて `422 Unprocessable Entity` で返る（200 + 空配列にはならない）。
 
-## 3. データ構造 (TypeScript 型定義との整合)
+- `q` 欠落 / 空文字列 / 101 文字以上
+- `priceMin > priceMax`
+- `priceMin` / `priceMax` が非数または負数
+- `sort` が許容値以外
+- `page` が 0 / 負数 / 非数
 
-フロントエンドの `frontend/types/product.ts` と整合性を保つ。
+レスポンスボディは FastAPI 標準の `{"detail": [...]}` 形式。
 
-### Listing (出品)
-| フィールド | 型 | 説明 |
-|---|---|---|
-| `site` | `"amazon" | "rakuten" | "yahoo"` | 販売サイト |
-| `url` | `string` | 商品ページ URL |
-| `price` | `number` | 本体価格 (税込) |
-| `shippingFee` | `number` | 送料 |
-| `points` | `number` | 獲得予定ポイント (円換算) |
-| `isAvailable` | `boolean` | 在庫ありフラグ |
+**設計メモ:**
 
-### Product (商品)
-| フィールド | 型 | 説明 |
-|---|---|---|
-| `id` | `string` | 内部 ID (UUID) |
-| `name` | `string` | 商品名 |
-| `janCode` | `string?` | JAN コード |
-| `imageUrl` | `string?` | 代表画像 URL |
-| `category` | `string?` | カテゴリ名 |
-| `listings` | `Listing[]` | 各サイトの出品リスト |
+- `q` は SQL バインドパラメタ経由でしか DB に届かないため、SQL インジェクションは構造的に発生しない。
+- 価格範囲のクロスフィールド検証はハンドラ側（`_validate_price_range`）。pydantic Query では表現できないため。
+- 操作ログには `q_len` / `hits` / `elapsed_ms` のみを残し、生の `q` は出力しない（ユーザー入力をログに混ぜない方針）。
 
-## 4. エラーレスポンス
+### 2.3. 商品全件取得（暫定）
+`GET /api/products`
 
-標準的な HTTP ステータスコードを使用する。
+`api/main.py` 直下に残置されたレガシー互換のエンドポイント。検索の正本は 2.2 を使用すること。
 
-- `400 Bad Request`: パラメータ不正
-- `404 Not Found`: 商品が見つからない
-- `500 Internal Server Error`: サーバー内部エラー
+### 2.4. 価格更新 Cron
+`GET /api/cron/update-prices`
 
-```json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "人間が読めるエラーメッセージ"
-  }
-}
-```
+Vercel Cron Jobs が 1 時間ごとに叩く（`vercel.json` の `0 * * * *`）。各 `EcSiteProduct` について Amazon / 楽天 / Yahoo の公式 API を呼び、`PriceHistory` を追記する。
+
+## 3. 未実装（Phase 1 で着手予定）
+
+詳細は `docs/plans/phase1-foundation.md` を参照。
+
+- `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me`（T-03）
+- `GET /api/cards` / `GET /api/cards/{id}`（T-04）
+- `GET /api/me/profile` / `PUT /api/me/profile`（T-05）
+- 検索結果へのユーザー個別実質価格の同梱（T-08）
+
+## 4. 共通エラーレスポンス
+
+| コード | 用途 |
+|---|---|
+| `200` | 正常 |
+| `401` | 認証必須エンドポイントでトークン無効・欠落 |
+| `404` | リソース未発見 |
+| `422` | クエリ・ボディのバリデーション失敗（FastAPI 標準形式） |
+| `500` | サーバー内部エラー |
+
+## 5. 型同期（Phase 1 完了後）
+
+ADR-005 の方針どおり、Phase 1 終了時点で `api/main.py` の OpenAPI スキーマから `frontend/types/api.ts` を生成する CI を組む（T-09）。それ以前は本仕様書を正本とし、フロントの手書き型と整合させる。
