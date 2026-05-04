@@ -75,6 +75,10 @@
 - 価格範囲のクロスフィールド検証はハンドラ側（`_validate_price_range`）。pydantic Query では表現できないため。
 - 操作ログには `q_len` / `hits` / `elapsed_ms` のみを残し、生の `q` は出力しない（ユーザー入力をログに混ぜない方針）。
 
+**現状の整合性メモ:**
+
+API は上記の envelope `{items, page, totalPages, totalCount}` を返すが、フロント `frontend/lib/api/searchClient.ts` 側はレスポンスを `Product[]` と仮定してキャストしている。そのため `data.items` を取り損ね、ランタイムでは描画不能になる。T-08（Listing 同梱）でレスポンス形を拡張する際、暫定的に envelope 形を維持するか、フロント側で `data.items` を取り出すかは T-09（OpenAPI 型同期）で確定する。
+
 ### 2.3. 商品全件取得（暫定）
 `GET /api/products`
 
