@@ -10,7 +10,7 @@ Vercel へのデプロイに最適化されたサーバーレスアーキテク�
 
 1. **Frontend (Next.js 14 App Router)**
    - 紙面メタファのエディトリアルデザイン UI。
-   - 現状はクライアントサイドのモックデータ駆動で動作（バックエンド API には未接続）。
+   - フロントは SWR 経由で `/api/products/search` を fetch する実装に切替済み（`frontend/lib/api/searchClient.ts`）。エラー時は `SearchErrorState` でリトライ可能。
 2. **API / Backend (FastAPI)**
    - ビジネスロジックのコア。Vercel Functions 上で動作（`api/` 配下に集約 / ADR-009）。
    - ユーザー認証、DB 操作、公式 API からのデータ取得を担う。
@@ -29,7 +29,7 @@ Vercel へのデプロイに最適化されたサーバーレスアーキテク�
 4. ユーザーの認証コンテキスト（JWT）に基づき、`UserProfile`（楽天ランク、所有カード等）を加味して実質価格を動的に算出（ADR-007 参照）。
 5. Frontend に結果を表示。
 
-> 現状の進捗: 検索エンドポイント `GET /api/products/search`（FTS + pg_trgm / `docs/api/backend-spec.md`）と価格更新 Cron は実装済み。一方フロントは `frontend/lib/mock/products.ts` のモック商品でクライアント完結のままで、実 API への差し替え（ADR-005 のブリッジタスク）は未着手。手順 4 のユーザー個別計算は Phase 1 の T-08 で対応予定（`docs/plans/phase1-foundation.md`）。
+> 現状の進捗: 検索エンドポイント `GET /api/products/search`（FTS + pg_trgm / `docs/api/backend-spec.md`）と価格更新 Cron は実装済み。フロントは fetch 版へ移行済み（ADR-005 ブリッジ B-1 完了相当）。残るブリッジは `Listing` 同梱型レスポンスへの整合（`ProductSummary` のままだと出品ソート不能）と、検索レスポンスの envelope 形 `{items, page, totalPages, totalCount}` とフロント側型契約の調整（B-3）。手順 4 のユーザー個別計算は Phase 1 の T-08 で対応予定（`docs/plans/phase1-foundation.md`）。
 
 ## データモデル
 
@@ -113,7 +113,8 @@ Footer（ロゴ + 年）
 | 通貨・ポイント・% 整形（日本語ロケール） | `lib/format/numbers.ts` |
 | 画像取得優先度ロジック | `lib/image/` |
 | 画像取得優先度の永続化フック | `lib/hooks/useImagePriority.ts` |
-| モック商品・クライアントサイド検索 | `lib/mock/` |
+| HTTP 検索クライアント（fetch + URL 組み立て） | `lib/api/` |
+| フィードバック UI（ローディング / エラー） | `components/feedback/` |
 | 共通型（`Product` / `Listing` / `ImagePriority` / `SortKey` 等） | `types/product.ts` |
 
 ### 画像取得優先度
