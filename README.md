@@ -14,13 +14,31 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 - **Data Source**: Amazon PA-API、楽天商品検索 API、Yahoo! ショッピング商品検索 API
 - **Scheduled Tasks**: Vercel Cron Jobs（`vercel.json`）
 
-設計の詳細は `docs/system-design.md`、意思決定の経緯は `docs/adr/` を参照。
+設計の詳細は `docs/tech/system-design.md`、要件定義は `docs/prd/price-comparison.md`、意思決定の経緯は `docs/adr/` を参照。
 
 ## 現在の進捗
 
 - フロントエンド UI（ヒーロー検索 / 検索結果 / 画像優先度設定）は実装済み
-- ただしフロントエンドは現状 **`lib/mock/` のモックデータ駆動**で動いており、バックエンド API とは未接続
 - バックエンド側のモデル定義・公式 API クライアント雛形・Cron 構造は配置済み
+- **Next Step**: Phase 1 実装（DB 構築・認証・パーソナライズロジック）に着手予定
+
+## 今後のロードマップ
+
+詳細は `docs/adr/006-advanced-features-roadmap.md` および `docs/plans/phase1-foundation.md` を参照。
+
+
+### Phase 1: モック脱却とパーソナライズ基盤
+- `lib/mock/` から実バックエンド API への接続
+- `UserProfile` / `Card` 連携によるユーザー固有の還元率反映
+- バックエンドでの実質価格計算ロジックの実装
+
+### Phase 2: 価格履歴と可視化
+- `PriceHistory` データの蓄積と取得 API の実装
+- `ProductDossier` へのミニマルな価格推移チャートの導入
+
+### Phase 3: セール予測とインテリジェンス
+- 過去データに基づくセール時期・「買い時」予測アルゴリズムの実装
+- エディトリアルな注釈（Marginal Note）による購入アドバイス表示
 
 ## プロジェクト構造
 
