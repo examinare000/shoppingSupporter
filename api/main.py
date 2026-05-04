@@ -3,12 +3,16 @@ from sqlalchemy.orm import Session
 from .common.database import get_db, engine
 from .common.models import Base, Product, EcSiteProduct
 from .cron.update_prices import update_site_product
+from .routers.products import router as products_router
 import os
 
 # Create tables if they don't exist
 # Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="pricehack API")
+# 検索系エンドポイント (/api/products/search) は router に分離。
+# /api/products（全件返却）はレガシー互換のため main.py 直下に残置。
+app.include_router(products_router)
 
 @app.get("/api/health")
 def health_check():
