@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * カラートークン
+ * エディトリアル/データジャーナリズム系の配色。
+ * 紙のような暖色ベース（paper）に、濃いインク色のテキスト、罫線色、朱赤・芥子色のアクセント。
+ * 紫グラデーション on 白背景といった陳腐な配色を意図的に避ける。
+ */
+:root {
+  --ink-primary: #13110F;
+  --ink-secondary: #5B564E;
+  --paper-base: #F4EFE6;
+  --paper-high: #FBF8F2;
+  --rule-line: #1E1A15;
+  --accent-vermilion: #B23A2A;
+  --accent-mustard: #A07A1F;
+}
+
+body {
+  background: var(--paper-base);
+  color: var(--ink-primary);
+  font-family: var(--font-newsreader), serif;
+  position: relative;
+}
+
+/*
+ * グレイン/ノイズオーバーレイ
+ * 紙のテクスチャ感を再現。SVG fractalNoise を data URI で埋め込み、
+ * fixed positioning でビューポート全体に薄く敷く。
+ * pointer-events: none で操作を妨げず、z-index: 0 で本文より背面に置く。
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/*
+ * ユーザー設定でモーション抑制が指定されている場合、
+ * 全アニメーション・トランジションを実質無効化する（WCAG 2.3.3 準拠）。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* タビュラー数字。価格・差額表示で桁を揃える用途。 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* スモールキャプス。セクションラベル・キャプション用途。 */
+.small-caps {
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+}

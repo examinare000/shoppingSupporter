@@ -1,0 +1,40 @@
+# 決定ログ
+
+## 1. SWR の `key` を「URL 文字列 / null」に、fetcher は closure で `query` を受け渡す
+- **背景**: SWR `useSWR(key, fetcher)` の key に何を入れるか、また `searchProducts(query)` のシグネチャ（引数 = query 文字列）と SWR の fetcher 契約（fetcher は key を引数として受け取る）をどう繋ぐかの選択が必要だった。
+- **検討した選択肢**:
+  1. key = query 文字列、fetcher = `searchProducts`（key がそのまま fetcher 引数に渡る）
+  2. key = `buildProductsSearchUrl(query)`、fetcher = `() => searchProducts(query)`（closure 経由で query を渡す）
+  3. key = `[path, query]` のタプル、fetcher = `([_, q]) => searchProducts(q)`
+- **理由**: 計画レポート §実装アプローチ「`key` は `query !== ''` のときのみ URL 文字列、空クエリでは `null` にして fetch をスキップ」に従い (2) を採用。URL 文字列をキーにすることで、エンドポイント・クエリパラメータ名が変わったとき `endpoints.ts` の差し替えが SWR キャッシュキーにも自然に反映される。`query` 文字列だけだと「同じクエリで別エンドポイントに切り替えた時にキャッシュが衝突する」リスクがあるが、URL なら衝突しない。
+
+## 2. リトライ導線は `mutate()` のみ（`revalidate` オプション省略）
+- **背景**: `SearchErrorState` の `onRetry` で SWR の再検証をどう起動するか。
+- **検討した選択肢**:
+  1. `mutate()` をそのまま呼ぶ（既定で revalidate=true）
+  2. `mutate(undefined, { revalidate: true })` と明示
+  3. `mutate(undefined, true)` の旧 API
+- **理由**: SWR v2 の `mutate()` は引数なしで「現在 key の再検証」が既定挙動のため (1) を採用。明示する書き方は冗長で、API の既定値を二度書くことになる（Policy「フォールバック・デフォルト引数の禁止」の趣旨と整合）。
+
+## 3. `lib/mock/products.ts`（MOCK_PRODUCTS）は削除しない
+- **背景**: 旧同期実装 `lib/mock/searchClient.ts` を削除する際に、その依存先 `MOCK_PRODUCTS` も削除すべきか判断が必要だった。
+- **検討した選択肢**:
+  1. 一緒に削除（searchClient.ts を消すと MOCK_PRODUCTS の参照元が無くなるため）
+  2. 保持（テスト用フィクスチャとして残す）
+- **理由**: 計画レポート §スコープ「維持」と ADR-005 §2 が「テスト用フィクスチャとして残す」方針で一致。本タスク指示書も削除を指示していない。タスク指示書に無い既存機能の削除は禁止（Coder ルール「タスク指示書にない既存機能の削除・構造変更を『ついでに』行う → 禁止」）。
+
+## 4. `Spinner` の `label` props を最終的に削除（固定文言）
+- **背景**: 初版で `label?: string` の optional prop を持たせたが、唯一の呼び出し元 `HomePage` が省略していた。
+- **検討した選択肢**:
+  1. デフォルト引数を残す
+  2. 必須引数にして HomePage に明示渡し
+  3. props を完全に削除し固定文言にする
+- **理由**: Policy「全呼び出し元が省略しているか？ → デフォルト引数を削除し、必須にする」に該当する状態だった。さらに `Spinner` は「検索結果のローディング」という単一用途の UI のため、ラベルを呼び出し側が選ぶ意義が薄い。(3) を採用して値の出処を 1 箇所に固定し、「値がどこから来るか分からない」状態を解消した。
+
+## 5. `searchClient.ts` のレスポンスは `Product[]` 直返しを前提に型アサーション
+- **背景**: SoT `docs/design/backend-api-spec.md` が不在のため、レスポンスボディの型をどう扱うか。
+- **検討した選択肢**:
+  1. `unknown` で受けて手書き型ガードで検証
+  2. `as Product[]` で前提型をそのまま採用
+  3. zod 等の runtime バリデーションを導入
+- **理由**: 計画レポート「レスポンスは `Product[]` で受ける。`unknown` → 型ガードまで踏み込まず、サーバー応答信頼の前提（フロント・バック責務分離知識）」に従い (2) を採用。ADR-005 §5 でも OpenAPI 経由の型同期が方針。タスクスコープ外の zod 導入は避け、SoT 確定後に endpoints / レスポンス検証の追加で対応できる構造に留める（変更点を `endpoints.ts` と `searchClient.ts` に局所化）。

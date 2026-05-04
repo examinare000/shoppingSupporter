@@ -1,0 +1,109 @@
+# バックエンド API 仕様
+
+最終更新: 2026-05-04（ADR-009 統合反映）
+
+実装は `api/main.py`（FastAPI）配下。ルートは `vercel.json` のリライトで `/api/(.*) → /api/main.py` に集約され、FastAPI 内部でパスマッチする。
+
+## 1. 概要
+
+- **Base URL**: `/api`
+- **形式**: JSON（フィールド名は camelCase）
+- **認証**: 検索系は当面公開エンドポイント。ユーザー文脈付きの API は `Authorization: Bearer <JWT>`（ADR-007）。
+
+## 2. 実装済みエンドポイント
+
+### 2.1. ヘルスチェック
+`GET /api/health`
+
+レスポンス: `{"status": "ok"}`
+
+### 2.2. 商品検索
+`GET /api/products/search`
+
+実装: `api/routers/products.py` + `api/repositories/products.py`。Postgres FTS（`tsvector` + `websearch_to_tsquery`）と pg_trgm（trigram 類似度）を OR で結合し、relevance はその合算でランキングする。スキーマは `alembic/versions/0002_product_search_columns.py` 参照。
+
+**Query Parameters:**
+
+| 名前 | 型 | 必須 | 制約 | 説明 |
+|---|---|---|---|---|
+| `q` | string | ○ | 1〜100 文字 | 検索キーワード |
+| `inStock` | boolean | × | true / false | 在庫フィルタ。未指定なら無効 |
+| `priceMin` | int | × | 0 以上 | 価格下限（包含） |
+| `priceMax` | int | × | 0 以上、`priceMin` 以上 | 価格上限（包含） |
+| `sort` | string | × | `relevance`（既定）/ `price_asc` / `price_desc` / `newest` | 並び順 |
+| `page` | int | × | 1 以上 | ページ番号（1 始まり） |
+
+ページサイズは固定 10 件（`api/repositories/products.py` の `PAGE_SIZE`）。
+
+**Response (200 OK):**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "name": "商品名",
+      "description": "...",
+      "imageUrl": "https://...",
+      "tags": ["tag1", "tag2"],
+      "inStock": true,
+      "currentPrice": 1500
+    }
+  ],
+  "page": 1,
+  "totalPages": 3,
+  "totalCount": 25
+}
+```
+
+`totalPages` は `ceil(totalCount / 10)`。`totalCount` は 0 のとき `totalPages` も 0。
+
+**バリデーション失敗 (422):**
+
+以下はすべて `422 Unprocessable Entity` で返る（200 + 空配列にはならない）。
+
+- `q` 欠落 / 空文字列 / 101 文字以上
+- `priceMin > priceMax`
+- `priceMin` / `priceMax` が非数または負数
+- `sort` が許容値以外
+- `page` が 0 / 負数 / 非数
+
+レスポンスボディは FastAPI 標準の `{"detail": [...]}` 形式。
+
+**設計メモ:**
+
+- `q` は SQL バインドパラメタ経由でしか DB に届かないため、SQL インジェクションは構造的に発生しない。
+- 価格範囲のクロスフィールド検証はハンドラ側（`_validate_price_range`）。pydantic Query では表現できないため。
+- 操作ログには `q_len` / `hits` / `elapsed_ms` のみを残し、生の `q` は出力しない（ユーザー入力をログに混ぜない方針）。
+
+### 2.3. 商品全件取得（暫定）
+`GET /api/products`
+
+`api/main.py` 直下に残置されたレガシー互換のエンドポイント。検索の正本は 2.2 を使用すること。
+
+### 2.4. 価格更新 Cron
+`GET /api/cron/update-prices`
+
+Vercel Cron Jobs が 1 時間ごとに叩く（`vercel.json` の `0 * * * *`）。各 `EcSiteProduct` について Amazon / 楽天 / Yahoo の公式 API を呼び、`PriceHistory` を追記する。
+
+## 3. 未実装（Phase 1 で着手予定）
+
+詳細は `docs/plans/phase1-foundation.md` を参照。
+
+- `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me`（T-03）
+- `GET /api/cards` / `GET /api/cards/{id}`（T-04）
+- `GET /api/me/profile` / `PUT /api/me/profile`（T-05）
+- 検索結果へのユーザー個別実質価格の同梱（T-08）
+
+## 4. 共通エラーレスポンス
+
+| コード | 用途 |
+|---|---|
+| `200` | 正常 |
+| `401` | 認証必須エンドポイントでトークン無効・欠落 |
+| `404` | リソース未発見 |
+| `422` | クエリ・ボディのバリデーション失敗（FastAPI 標準形式） |
+| `500` | サーバー内部エラー |
+
+## 5. 型同期（Phase 1 完了後）
+
+ADR-005 の方針どおり、Phase 1 終了時点で `api/main.py` の OpenAPI スキーマから `frontend/types/api.ts` を生成する CI を組む（T-09）。それ以前は本仕様書を正本とし、フロントの手書き型と整合させる。

@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/main.py"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/update-prices",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
