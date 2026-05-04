@@ -1,6 +1,6 @@
 # Phase 1 実装計画: 基盤整備と UserProfile 連携
 
-最終更新日: 2026-05-04
+最終更新日: 2026-05-04（ADR-009 / T-01・T-02・T-07 完了反映）
 
 ## 位置づけ
 
@@ -28,57 +28,55 @@
 
 - **認証方式**: ADR-007 に基づき「FastAPI 内発行の JWT（ステートレス）」を採用。
 - **データベース**: ADR-008 に基づき 「Neon (Serverless Postgres)」を採用。
-- **全文検索**: ADR-005 で「データ量が見えてから決める」とされているため、Phase 1 では `ILIKE` ベースの素朴な部分一致に留める。Postgres trigram / GIN 化は Phase 2 以降。
+- **バックエンド配置**: ADR-009 により `backend/` を廃止し、すべて `api/` 配下に統合。Alembic はリポジトリルート（`alembic/`）。テストは `tests/{unit,integration}/`。
+- **全文検索**: 当初プランでは `ILIKE` 部分一致を予定していたが、T-07 着手時点で Postgres FTS（`tsvector` + `websearch_to_tsquery`）+ pg_trgm（trigram 類似度）を採用し、誤字耐性とランキングを両立する実装にスケールアップ済み。
 - **ポイント円換算レート**: 楽天 1pt = 1 円、Amazon ポイント = 1 円、PayPay ポイント = 1 円を初期値として固定値で持つ（後続でマスタ化）。
 
 ## タスクゴール一覧
 
-各タスクは 1 ブランチ = 1 目的の単位（`agent-rules/10-git-strategy.md`）。並列着手可否と依存は「依存」欄を参照。
+各タスクは 1 ブランチ = 1 目的の単位（`agent-rules/10-git-strategy.md`）。並列着手可否と依存は「依存」欄を参照。状態欄は 2026-05-04 時点。
 
-| ID | タスクゴール | 依存 | 並列可 |
-|----|--------------|------|--------|
-| T-01 | Alembic 導入と初期マイグレーション | なし | ○ |
-| T-02 | API テスト基盤（pytest + テスト用 DB）整備 | なし | ○ |
-| T-03 | JWT 最小認証の実装 | T-01, T-02 | × |
-| T-04 | `Card` マスタ API と初期シード | T-01, T-02 | T-05 と並列可 |
-| T-05 | `UserProfile` API（参照・更新） | T-03 | T-04 と並列可 |
-| T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | T-02 | T-04, T-05 と並列可 |
-| T-07 | DB 主導の商品検索 API（匿名向け最小版） | T-01, T-02 | T-06 と並列可 |
-| T-08 | 検索 API への UserProfile / Card 統合 | T-05, T-06, T-07 | × |
-| T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | T-04〜T-08 のうち API 形が確定したもの | × |
+| ID | タスクゴール | 状態 | 依存 | 並列可 |
+|----|--------------|------|------|--------|
+| T-01 | Alembic 導入と初期マイグレーション | ✅ 完了（0001 初期 + 0002 検索カラム） | なし | ○ |
+| T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了（unit + integration / testcontainers Postgres） | なし | ○ |
+| T-03 | JWT 最小認証の実装 | ⏳ 未着手 | T-01, T-02 | × |
+| T-04 | `Card` マスタ API と初期シード | ⏳ 未着手 | T-01, T-02 | T-05 と並列可 |
+| T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手 | T-03 | T-04 と並列可 |
+| T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ⏳ 未着手 | T-02 | T-04, T-05 と並列可 |
+| T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了（FTS+trigram で当初予定よりリッチ。`/api/products/search`） | T-01, T-02 | T-06 と並列可 |
+| T-08 | 検索 API への UserProfile / Card 統合 | ⏳ 未着手 | T-05, T-06, T-07 | × |
+| T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | ⏳ 未着手 | T-04〜T-08 のうち API 形が確定したもの | × |
 
 ---
 
-### T-01. Alembic 導入と初期マイグレーション
+### T-01. Alembic 導入と初期マイグレーション ✅
 
 **なぜ**: 現状 `api/main.py` の `Base.metadata.create_all` はコメントアウトされており、スキーマ変更が破壊的に効く。Phase 1 で `UserProfile` / `Card` 周りに手を入れるため、宣言的マイグレーションを先に立てる必要がある。
 
-**やること**:
-- **Neon 構築**: Neon プロジェクトを作成し、`DATABASE_URL` (pooler) を取得して `.env` に設定。
-- `alembic` を `requirements.txt` に追加
-- `api/migrations/` を初期化し、`api/common/models.py` の現状を反映する 0001 マイグレーションを生成
-- `README.md` に「マイグレーション適用手順」を追記
-- ローカル / Vercel 双方での実行手段を整理（少なくとも手順を文書化）
+**実装結果**（ADR-009 で `backend/` から `api/` に統合済み）:
+- `alembic.ini` と `alembic/` をリポジトリルートに配置（`script_location = alembic`）。`env.py` は `api.common.models.Base` を参照。
+- `alembic/versions/0001_initial_schema.py` — 6 テーブル（users / cards / user_profiles / products / ec_site_products / price_histories）。
+- `alembic/versions/0002_product_search_columns.py` — products の `tags` / `in_stock` / `current_price` / `search_vector`、`pg_trgm` 拡張、tsvector 維持トリガ、GIN/B-tree インデックス。
+- `requirements-dev.txt` に `alembic` を追加（ランタイムでは不要）。
+- `README.md` に Neon 直接接続での `alembic upgrade head` 手順を追記済み。
 
-**完了条件**:
-- 空の Postgres に対して `alembic upgrade head` が通り、6 テーブルが作成される
-- `alembic revision --autogenerate` で差分なしになる
-
-**コミット分割の目安**: ① 依存追加, ② alembic init とテンプレート, ③ 0001 マイグレーション, ④ ドキュメント追記。
+**運用**: スキーマ変更は **デプロイ前に** Neon に対して `alembic upgrade head` を実行する。Vercel Functions 起動時の自動 upgrade は行わない。
 
 ---
 
-### T-02. API テスト基盤の整備
+### T-02. API テスト基盤の整備 ✅
 
 **なぜ**: 現状バックエンドにテストが存在せず、TDD（`agent-rules/11-testing-strategy.md`）を成立させられない。Phase 1 の検算系ロジックは TDD で進める前提のため、最初に枠を作る。
 
-**やること**:
-- `pytest`, `pytest-asyncio`, `httpx`, `pytest-cov` を `requirements.txt` に追加
-- `api/tests/` を新設し、`conftest.py` で FastAPI `TestClient` と DB セッションフィクスチャを提供
-- テスト用 DB 戦略を SQLite in-memory + 関数スコープেরトランザクションロールバックで統一（PostgreSQL 固有機能は使っていないため許容。Trigram 化を始める時点で `pytest-postgresql` 等への切替を再評価）
-- 既存 `/api/health` のスモークテストを 1 本書き、グリーンになることを確認
+**実装結果**:
+- `pytest`, `pytest-asyncio`, `httpx`, `testcontainers` を `requirements-dev.txt` に追加。
+- `tests/unit/` — 外部 API クライアント（Amazon PA-API 署名 / レスポンス処理）の単体テスト 48 件。
+- `tests/integration/` — `update_prices` × `AmazonAPI` の結合 5 件と、`/api/products/search` 全 52 件（リポジトリ unit + エンドポイント integration）。
+- `tests/integration/conftest.py` で testcontainers Postgres + Alembic 適用 + `app.dependency_overrides[get_db]` を提供。
+- 当初予定していた SQLite in-memory 戦略は破棄（T-07 で FTS / pg_trgm / ARRAY を使うため Postgres 互換が必須になった）。
 
-**完了条件**: `pytest -q` が緑で 1 件以上のテストが走る。
+**完了条件**: 全 105 件の `pytest -q` が緑（integration は Docker 必須）。
 
 ---
 
@@ -144,18 +142,19 @@
 
 ---
 
-### T-07. DB 主導の商品検索 API（匿名向け最小版）
+### T-07. DB 主導の商品検索 API（匿名向け最小版） ✅
 
 **なぜ**: ADR-005 の決定により、検索のクリティカルパスは DB に閉じる。フロントの `searchProducts(query)` の置き換え先となる API がまず必要。Phase 1 ではユーザー文脈なしのレスポンスを先に確定させ、T-08 で個別化を重ねる。
 
-**やること**:
-- `GET /api/products/search?q=...` を実装
-- マッチング: `Product.name` に対する `ILIKE %q%`。空クエリは全件（既存モック挙動と一致）
-- レスポンス: `Product` + 紐づく `EcSiteProduct` 配列 + 各サイト最新の `PriceHistory` から構成。フロント `types/product.ts` の `Product` / `Listing` 形と整合させる
-- 並び順は最終更新日時の降順（暫定）
-- TDD: ヒット件数 / 大文字小文字無視 / 空クエリ全件 / 0 件レスポンス
+**実装結果**（当初予定よりリッチなマッチングを採用）:
+- `GET /api/products/search` を実装。実装は `api/routers/products.py` + `api/repositories/products.py`。仕様の正本は `docs/api/backend-spec.md`。
+- マッチング: 当初予定の `ILIKE` ではなく、Postgres FTS（`tsvector` + `websearch_to_tsquery`）と pg_trgm（trigram 類似度）の OR 合算。`name` / `description` / `tags` を結合した検索対象に対して FTS と trigram の両方をかけ、relevance ランクは `ts_rank + similarity` で合算する。
+- クエリパラメタ: `q`（必須・1〜100 文字）/ `inStock` / `priceMin` / `priceMax` / `sort` / `page`。
+- レスポンス: `{items, page, totalPages, totalCount}` のエンベロープ形。`items` は camelCase（`imageUrl` / `inStock` / `currentPrice`）。
+- 入力エラーは 200+空配列ではなく 422（`q` 欠落・空・101 文字以上、`priceMin > priceMax`、非数 / 負数、不正な `sort`、`page` ≤ 0 など）。
+- TDD: 105 件中 52 件が本機能のテスト（FTS / trigram / フィルタ / ソート / ページング / 422 / クエリストリング契約）。
 
-**完了条件**: 既存モックの 1 〜 2 商品を seed として投入したうえで、フロントが期待する形状の JSON が返る。
+**未着手の Phase 1 ギャップ**: 現在のレスポンスは `Product` 単体のサマリ（`ProductSummary`）のみで、`EcSiteProduct` / `Listing[]` の同梱は未実装。フロントが `types/product.ts` の `Listing` を要求する場面では T-08 と合わせてレスポンス形を再設計する。
 
 ---
 
