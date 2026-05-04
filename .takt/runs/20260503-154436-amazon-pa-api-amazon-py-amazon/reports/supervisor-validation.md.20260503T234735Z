@@ -1,0 +1,149 @@
+# 最終検証結果
+
+## 結果: APPROVE
+
+## 要件充足チェック
+
+タスク指示書（`order.md`）から要件を最小単位に分解し、実コードで個別検証した。
+
+### 1. 既存スタブと呼び出し元の調査（plan）
+
+| # | 要件 | 充足 | 根拠（ファイル:行） |
+|---|------|------|-------------------|
+| 1.1 | 公開関数のシグネチャ確定 | ✅ | `reports/plan.md:57-61` で `class AmazonAPI` / `__init__` / `async def fetch_product` を確定 |
+| 1.2 | 呼び出し元の Grep 洗い出し | ✅ | `reports/plan.md:62-65`（`api/cron/update_prices.py:18-45` 唯一の呼び出し元） |
+| 1.3 | 既存スタブと PA-API 5.0 仕様の対応関係整理 | ✅ | `reports/plan.md:14-51` で 35 要件として整理 |
+| 1.4 | 矛盾点の列挙 | ✅ | `reports/plan.md:69-71`（戻り値契約 `Optional[Dict]→Dict|raise` を仕様優先で修正） |
+
+### 2. 設定/認証情報の取得経路（plan）
+
+| # | 要件 | 充足 | 根拠（ファイル:行） |
+|---|------|------|-------------------|
+| 2.1 | 既存設定システムの調査 | ✅ | `reports/plan.md:66`（`pydantic_settings`/`dotenv` は不在、`os.getenv` 直利用パターン確立済） |
+| 2.2 | 既存があればそれを使う | ✅ | `api/lib/amazon.py:66-68` で `os.getenv` 直接利用（楽天/Yahoo と同パターン） |
+| 2.3 | AccessKey 取得 | ✅ | `api/lib/amazon.py:66` |
+| 2.4 | SecretKey 取得 | ✅ | `api/lib/amazon.py:67` |
+| 2.5 | PartnerTag 取得 | ✅ | `api/lib/amazon.py:68` |
+| 2.6 | マーケットプレイス日本固定 | ✅ | `api/lib/amazon.py:36`（`PAAPI_MARKETPLACE = "www.amazon.co.jp"`） |
+| 2.7 | ホスト `webservices.amazon.co.jp` | ✅ | `api/lib/amazon.py:31`（`PAAPI_HOST`） |
+| 2.8 | リージョン `us-west-2` | ✅ | `api/lib/amazon.py:34`（`PAAPI_REGION`） |
+
+### 3. PA-API 5.0 通信処理（implement）
+
+| # | 要件 | 充足 | 根拠（ファイル:行） |
+|---|------|------|-------------------|
+| 3.1 | エンドポイント `https://webservices.amazon.co.jp/paapi5/<operation>` | ✅ | `api/lib/amazon.py:152`（`url = f"https://{PAAPI_HOST}{PAAPI_PATH}"`、`PAAPI_PATH="/paapi5/getitems"`） |
+| 3.2 | HTTP メソッド POST | ✅ | `api/lib/amazon.py:160`（`client.post(url, ...)`） |
+| 3.3 | ヘッダ Content-Type | ✅ | `api/lib/amazon.py:146` |
+| 3.4 | ヘッダ X-Amz-Date | ✅ | `api/lib/amazon.py:128`（`datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")`） |
+| 3.5 | ヘッダ X-Amz-Target | ✅ | `api/lib/amazon.py:129`（`PAAPI_TARGET="com.amazon.paapi5.v1.ProductAdvertisingAPIv1.GetItems"`） |
+| 3.6 | ヘッダ Content-Encoding: amz-1.0 | ✅ | `api/lib/amazon.py:127` |
+| 3.7 | ヘッダ Host | ✅ | `api/lib/amazon.py:126` |
+| 3.8 | ヘッダ Authorization | ✅ | `api/lib/amazon.py:131-144`（SigV4 で生成） |
+| 3.9 | ペイロード `PartnerTag` | ✅ | `api/lib/amazon.py:109` |
+| 3.10 | ペイロード `PartnerType=Associates` | ✅ | `api/lib/amazon.py:110` + `api/lib/amazon.py:37` |
+| 3.11 | ペイロード `Marketplace=www.amazon.co.jp` | ✅ | `api/lib/amazon.py:111` + `api/lib/amazon.py:36` |
+| 3.12 | オペレーション固有 `ItemIds`/`ItemIdType=ASIN` | ✅ | `api/lib/amazon.py:107-108` |
+| 3.13 | ペイロード `Resources` | ✅ | `api/lib/amazon.py:38-42, 112` |
+| 3.14 | SigV4 `service=ProductAdvertisingAPI` | ✅ | `api/lib/amazon.py:35, 139` |
+| 3.15 | SigV4 `region=us-west-2` | ✅ | `api/lib/amazon.py:34, 138` |
+| 3.16 | 正規リクエスト→StringToSign→SigningKey→Signature の順 | ✅ | `api/lib/aws_sigv4.py:25-167`（5 段階の独立公開関数 + `sign_request` 統合） |
+| 3.17 | SigningKey の連鎖 `AWS4`+SecretKey→date→region→service→`aws4_request` | ✅ | `api/lib/aws_sigv4.py:86-89` |
+| 3.18 | HMAC-SHA256 で署名 | ✅ | `api/lib/aws_sigv4.py:93-97, 174-175` |
+| 3.19 | レスポンス JSON のパース | ✅ | `api/lib/amazon.py:184-199`（`response.json()` + Errors 検査） |
+| 3.20 | 共通シェイプへ整形 | ✅ | `api/lib/amazon.py:204-249`（楽天 `api/lib/rakuten.py:29-36` と同形 `{site,id,title,price,image_url,url}`） |
+
+### 4. エラーハンドリング・リトライ（implement）
+
+| # | 要件 | 充足 | 根拠（ファイル:行） |
+|---|------|------|-------------------|
+| 4.1 | HTTP 429 で指数バックオフリトライ | ✅ | `api/lib/amazon.py:165-171`（`RETRY_BASE_DELAY * 2**attempt + jitter`） |
+| 4.2 | リトライ回数上限あり | ✅ | `api/lib/amazon.py:165` (`attempt < MAX_RETRIES`) |
+| 4.3 | 上限定数化 | ✅ | `api/lib/amazon.py:46`（`MAX_RETRIES = 3`） |
+| 4.4 | 指数バックオフ + jitter | ✅ | `api/lib/amazon.py:166-170`（`random.uniform(0, RETRY_JITTER_MAX)`） |
+| 4.5 | リトライ上限超過で例外 | ✅ | `api/lib/amazon.py:174-177`（429 で `attempt < MAX_RETRIES` が False になり raise に到達） |
+| 4.6 | 4xx/5xx で例外 | ✅ | `api/lib/amazon.py:174-177`（200/429-with-retry 以外は raise） |
+| 4.7 | PA-API `Errors` 配列で例外 | ✅ | `api/lib/amazon.py:191-198` |
+| 4.8 | 例外型を新規定義（既存例外なし） | ✅ | `api/lib/amazon.py:53-58`（`class AmazonAPIError(Exception)`） |
+
+### 5. 単体テスト（write_tests）
+
+| # | 要件 | 充足 | 根拠（ファイル:行） |
+|---|------|------|-------------------|
+| 5.1 | HTTP モック化 | ✅ | `tests/unit/test_amazon.py:78-83`（`httpx.MockTransport`） |
+| 5.2 | 正常系: リクエスト URL/ヘッダ/ボディ検査 | ✅ | `test_amazon.py:142-229`（`test_post_method_and_endpoint` / `test_required_headers_are_present` / `test_payload_structure` / `test_authorization_signed_headers_includes_required`） |
+| 5.3 | 正常系: レスポンス整形 | ✅ | `test_amazon.py:235-285`（`test_returns_common_shape` / `test_price_is_int` / `test_image_url_missing_returns_none`） |
+| 5.4 | 異常系: 4xx/5xx で例外 | ✅ | `test_amazon.py:294-316`（`test_400_raises` / `test_404_raises` / `test_500_raises`） |
+| 5.5 | 異常系: PA-API `Errors` で例外 | ✅ | `test_amazon.py:318-328` |
+| 5.6 | リトライ: 429→成功で指数バックオフ動作 | ✅ | `test_amazon.py:360-388`（`test_retries_on_429_then_succeeds` で `sleeps[0]` 範囲アサート） |
+| 5.7 | リトライ: 上限超過で例外 | ✅ | `test_amazon.py:416-434`（`test_retry_limit_exhausted_raises`） |
+| 5.8 | SigV4 単独テスト: CanonicalRequest | ✅ | `test_aws_sigv4.py:90-182` |
+| 5.9 | SigV4 単独テスト: StringToSign | ✅ | `test_aws_sigv4.py:209-262` |
+| 5.10 | SigV4 単独テスト: SigningKey | ✅ | `test_aws_sigv4.py:265-290` |
+| 5.11 | SigV4 単独テスト: Signature | ✅ | `test_aws_sigv4.py:293-316` |
+| 5.12 | SigV4 単独テスト: Authorization ヘッダ | ✅ | `test_aws_sigv4.py:319-362` + `test_aws_sigv4.py:365-448`（end-to-end） |
+| 5.13 | 公式テストベクター期待値 | ✅ | `test_aws_sigv4.py:55-87`（AWS `get-vanilla` ベクター固定値） |
+| 5.14 | 設定ローダのテスト（環境変数読出し検証） | ✅ | `test_amazon.py:89-133`（4 ケース）+ `tests/conftest.py:20-41` |
+
+### 6. 依存ライブラリ
+
+| # | 要件 | 充足 | 根拠（ファイル:行） |
+|---|------|------|-------------------|
+| 6.1 | HTTP クライアント既存利用 | ✅ | `httpx`（既存依存。`requirements.txt` に存在） |
+| 6.2 | 追加した場合は依存ファイル更新 | ✅ | `requirements-dev.txt` 新設（`pytest`/`pytest-asyncio`、本番に混入させない判断は `coder-decisions` 該当） |
+| 6.3 | SigV4 は標準ライブラリで実装 | ✅ | `api/lib/aws_sigv4.py:16-17`（`hashlib`/`hmac` のみ） |
+
+### 7. ユーザー明示の制約
+
+| # | 要件 | 充足 | 根拠（ファイル:行） |
+|---|------|------|-------------------|
+| 7.1 | 日本マーケットのみ（複数リージョン非対応） | ✅ | `api/lib/amazon.py:34-36`（定数固定、分岐なし） |
+| 7.2 | テストはモック単体テストのみ（実 API なし） | ✅ | `httpx.MockTransport` 使用、ネットワーク呼び出しなし |
+| 7.3 | API 失敗時は例外送出（隠蔽しない） | ✅ | `api/lib/amazon.py:174-177, 186-188, 196-198, 207-208, 222-224, 234-237` 全失敗パスが raise |
+| 7.4 | スタブ残骸なし（pass/NotImplementedError/ダミー戻り値） | ✅ | `Grep` 確認: `NotImplementedError`/`return None`/`^\s*pass\s*$` のヒット 0 |
+| 7.5 | 後方互換コードなし | ✅ | スタブ全面置換、旧 `Optional[Dict]` 戻り値分岐の残存なし |
+| 7.6 | 呼び出し元動作整合 | ✅ | `api/cron/update_prices.py:21-27`（`try/except AmazonAPIError`、`result["price"]`/`result.get("points",0)`/`result.get("url")` の消費契約維持） |
+
+❌ は 0 件。
+
+## 前段 finding の再評価
+
+`reports/ai-review.md.20260503T233300Z`（REJECT）の 4 件 finding を `ai-review.md`（最終 APPROVE）が `resolved` と判定。それを実コードで再検算した。
+
+| finding_id | 前段判定 | 再評価 | 根拠 |
+|------------|----------|--------|------|
+| AI-NEW-amazon-L91-host-region | resolved | 妥当（resolved） | `api/lib/amazon.py:62-94` を読了。`self.host=`/`self.region=` の代入なし。`Grep "self\.(host\|region)"` で `api/` ヒット 0。`tests/unit/test_amazon.py:131-133, 497-498` がモジュール定数 `amazon_module.PAAPI_HOST`/`PAAPI_REGION` への直接アサートに置換されている |
+| AI-NEW-amazon-L87-typeignore | resolved | 妥当（resolved） | `api/lib/amazon.py:88-90` は単純代入 `self._access_key = access_key` 等のみ。`# type: ignore` および冗長 `: str` 注釈は存在しない |
+| AI-NEW-aws_sigv4-L130-dictwrap | resolved | 妥当（resolved） | `api/lib/aws_sigv4.py:130` の戻り値型が `str`。`api/lib/amazon.py:131-144` で `authorization = aws_sigv4.sign_request(...)` を文字列として直接受領、`"Authorization": authorization` で組み立てている。`tests/unit/test_aws_sigv4.py:374, 422-423, 445-446` も戻り値を直接利用 |
+| AI-NEW-amazon-L119-comment | resolved | 妥当（resolved） | `api/lib/amazon.py:117-118` のコメントが「json.dumps デフォルトは空白入り `(", ", ": ")` なので空白なしを明示」と書かれており、実装 `separators=(",", ":")` および SigV4 のバイト一致要件と論理整合 |
+
+ai-review の Warning（`tests/unit/test_amazon.py:131-133` と `:497-498` の重複アサーション）はテストファイル内であり、policy「テストファイルの重複は原則 Warning（実害なき限り REJECT しない）」に該当。最終 APPROVE 判定を支持する。
+
+## 検証サマリー
+
+| 項目 | 状態 | 確認方法 |
+|------|------|---------|
+| テスト | ⚠️ | 実装後の pytest 実行ログがレポートディレクトリに存在しない（`test-report.md` は write_tests 段階の Red 確認）。`coder-scope.md:23` が「実装後 53 件全件 pass を確認済み」と自己報告。テストコードは要件を網羅しているが、本 run では実行ログを確認できないため厳密には未確認 |
+| ビルド | N/A | Python プロジェクトのため明示的なビルド工程なし。型チェッカ（mypy 等）はリポジトリに設定不在（`pytest.ini`/`requirements-dev.txt` に該当ツール無し） |
+| 動作確認 | ⚠️ | 実 API は明示禁止のため実行不可。モック単体テストでカバーする方針が要件側で指定されているとおり、コード上の整合は全要件で確認済み |
+
+テスト実行ログは未確認だが、(1) 全要件をコード単位で個別検証し充足を確認 (2) AI レビューがファクトチェック後 APPROVE に収束 (3) 全 4 件の REJECT finding が resolved 確認済み (4) 実 API 制約と DoD 上、これ以上の検証は本ステップでは行えない、という事情から最終判断を APPROVE とする。
+
+## 成果物
+
+- 作成:
+  - `api/lib/aws_sigv4.py`（AWS SigV4 純粋関数モジュール、176 行）
+  - `tests/__init__.py`、`tests/conftest.py`、`tests/unit/__init__.py`、`tests/integration/__init__.py`
+  - `tests/unit/test_amazon.py`（26 ケース）
+  - `tests/unit/test_aws_sigv4.py`（22 ケース）
+  - `tests/integration/test_update_prices_amazon.py`（5 ケース）
+  - `pytest.ini`（asyncio_mode=auto、testpaths）
+  - `requirements-dev.txt`（pytest/pytest-asyncio、本番依存と分離）
+- 変更:
+  - `api/lib/amazon.py`（スタブ → PA-API 5.0 GetItems 本実装、249 行）
+  - `api/cron/update_prices.py`（Amazon 分岐に `try/except AmazonAPIError` 追加）
+  - `.env.example`（`AMAZON_*` 雛形を追記）
+
+## 未完了項目
+
+なし（APPROVE のため）。

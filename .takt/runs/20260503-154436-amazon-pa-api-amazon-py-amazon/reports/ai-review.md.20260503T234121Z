@@ -1,0 +1,68 @@
+# AI生成コードレビュー（2回目）
+
+## 結果: APPROVE
+
+## サマリー
+前回 REJECT した 4 件の指摘はすべて修正済み (resolved)。
+変更ファイル内に新規の REJECT レベルの AI アンチパターンは検出されなかった。
+テスト内に軽微な重複アサーション（policy「テストファイルの重複は原則 Warning」に該当）が 1 件あるが、ブロッキングではない。
+
+## 検証した項目
+| 観点 | 結果 | 備考 |
+|------|------|------|
+| 仮定の妥当性 | ✅ | PA-API 5.0 / SigV4 仕様準拠、AWS 公式 `get-vanilla` ベクターで検算済み |
+| API/ライブラリの実在 | ✅ | `httpx` / `hmac` / `hashlib` のみ。幻覚 API なし |
+| コンテキスト適合 | ✅ | 前回指摘の `# type: ignore` / test-only public 属性は除去済み |
+| もっともらしいが間違い | ✅ | `_serialize_payload` の Why コメントが実装と整合 |
+| デッドコード | ✅ | `self.host` / `self.region` 削除済み。production 参照ゼロ |
+| フォールバック濫用 | ✅ | 必須データに対する濫用なし |
+| スコープクリープ | ✅ | order.md の対象内、過剰抽象化なし |
+| スコープ縮小 | ✅ | order.md の必須要件（PA-API 通信、SigV4、リトライ、モックテスト、エラー時 raise）すべて実装 |
+
+## 今回の指摘（new）
+（該当なし — REJECT レベルの問題なし）
+
+## 継続指摘（persists）
+（該当なし）
+
+## 解消済み（resolved）
+| finding_id | 解消根拠 |
+|------------|----------|
+| AI-NEW-amazon-L91-host-region | `api/lib/amazon.py:62-94` を実コード確認。`self.host = PAAPI_HOST` / `self.region = PAAPI_REGION` の代入が削除されている。`Grep "self\.(host\|region)"` で `api/` 配下にヒットなし。`tests/unit/test_amazon.py:131-133` および `:497-498` は `amazon_module.PAAPI_HOST` / `PAAPI_REGION` への直接アサートに置換済み |
+| AI-NEW-amazon-L87-typeignore | `api/lib/amazon.py:88-90` を実コード確認。`self._access_key = access_key` 等の単純代入のみで `# type: ignore` も `: str` 注釈も存在しない。`Grep "type: ignore"` でソースコード内ヒットなし |
+| AI-NEW-aws_sigv4-L130-dictwrap | `api/lib/aws_sigv4.py:130` の戻り値型が `str`（Authorization ヘッダ値）に変更済み。`api/lib/amazon.py:131-141, 144` で `authorization = aws_sigv4.sign_request(...)` を受け取り `"Authorization": authorization,` で組み立てている。`tests/unit/test_aws_sigv4.py:374, 422-423, 445-446` の 3 テストが `signed["Authorization"]` 抽出ではなく戻り値を直接利用している |
+| AI-NEW-amazon-L119-comment | `api/lib/amazon.py:117-118` を実コード確認。コメントは「Why separators=(",", ":") 固定: SigV4 の署名対象は HTTP ボディとバイト一致が必須。json.dumps のデフォルトは空白入り `(", ", ": ")` なので空白なしを明示する。」となっており、実装 `separators=(",", ":")` と論理的に整合。json.dumps のデフォルトは公式 Python ドキュメント上 `(', ', ': ')`（indent=None 時）で comment 内容と一致 |
+
+## 再開指摘（reopened）
+（該当なし）
+
+## 参考情報（Warning — 非ブロッキング）
+
+policy「テストファイルの重複は原則 Warning（実害＝フレーク／誤検知／回帰検出不能 が再現できる場合のみ REJECT）」に該当するため記録のみ。
+
+| 場所 | 内容 |
+|------|------|
+| `tests/unit/test_amazon.py:131-133` と `:497-498` | `amazon_module.PAAPI_HOST == "webservices.amazon.co.jp"` および `amazon_module.PAAPI_REGION == "us-west-2"` のアサーションが `TestInitCredentialValidation.test_all_credentials_present_does_not_raise` と `TestConstants.test_paapi_jp_endpoint_constants` で重複している。前回指摘の修正案 (b)「定数を直接アサート」を `test_all_credentials_present_does_not_raise` に適用したことで、`TestConstants` 側と同一アサーションになっている。実害（フレーク／誤検知／回帰検出不能）はないため Warning。改善するなら `test_all_credentials_present_does_not_raise` から L132-133 を削除し、認証情報チェックの責務に絞ることを推奨 |
+
+## 確認した変更差分
+- `api/lib/amazon.py` (1-249) - 全行確認
+- `api/lib/aws_sigv4.py` (1-176) - 全行確認
+- `tests/unit/test_amazon.py` (1-499) - 修正箇所中心に確認
+- `tests/unit/test_aws_sigv4.py` (374-448) - 修正対象 3 テスト確認
+- `api/cron/update_prices.py` (14-34) - 呼び出し元の整合性確認
+- `tests/conftest.py` - フィクスチャ整合性確認
+- `tests/integration/test_update_prices_amazon.py` - 結合テスト整合性確認
+
+## 実行した検索
+- `Grep "api\.host|api\.region|self\.host|self\.region|type:\s*ignore|signed\["` 全体 → ソースコードヒットゼロ（report/history のみ）
+- `Grep "access_key|secret_key|partner_tag"` `api/` → 認証情報の流れがすべて `_access_key`/`_secret_key`/`_partner_tag` で一貫
+- `git diff --stat HEAD` → `.env.example` / `api/cron/update_prices.py` / `api/lib/amazon.py` 修正、`api/lib/aws_sigv4.py` / `pytest.ini` / `requirements-dev.txt` / `tests/` 新規
+
+## 判定根拠
+policy 判定基準に照らし合わせ:
+- REJECT 基準（テストなし振る舞い／any 型／フォールバック乱用／説明コメント／未使用コード／オブジェクト直接変更／空 catch／TODO／DRY 違反／汎用層の特定実装漏洩／旧コード残存／クロスバリデーション欠如）すべて該当なし
+- 前回指摘 4 件すべて resolved
+- 検出された Warning は test 重複 1 件のみで、policy 上「テストファイルの重複は原則 Warning」に該当
+- `new` または `persists` の問題が 0 件のため、policy「REJECT は new または persists の問題が1件以上ある場合のみ許可」によりREJECT不可
+
+→ APPROVE

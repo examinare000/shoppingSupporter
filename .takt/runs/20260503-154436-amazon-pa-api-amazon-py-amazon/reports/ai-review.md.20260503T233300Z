@@ -1,0 +1,40 @@
+# AI生成コードレビュー
+
+## 結果: REJECT
+
+## サマリー
+前回 4 件の指摘 (AI-NEW-amazon-L184 / AI-NEW-aws_sigv4-L122 / AI-NEW-update_prices-L28 / AI-NEW-amazon-L120) は実コードを確認した結果すべて修正済み (`resolved`)。
+今回は変更ファイル (`api/lib/amazon.py` / `api/lib/aws_sigv4.py`) 内の AI 生成特有のアンチパターンを再走査し、**未使用 public 属性 / 効果のない型ヒント抑制 / 過剰な戻り値ラッピング / 不正確な Why コメント** の 4 件を検出したため REJECT。
+
+## 検証した項目
+| 観点 | 結果 | 備考 |
+|------|------|------|
+| 仮定の妥当性 | ✅ | PA-API 5.0 / SigV4 仕様準拠、AWS 公式 `get-vanilla` テストベクターで検算済み |
+| API/ライブラリの実在 | ✅ | `httpx` / `hmac` / `hashlib` のみ。幻覚 API なし |
+| 既存コードベース適合 | ⚠️ | 楽天/Yahoo クライアントには無い慣習（`# type: ignore`、test-only public 属性）が混入 |
+| スコープ | ✅ | order.md の対象内に収まっている |
+| デッドコード | ⚠️ | `self.host` / `self.region` が production から参照されず |
+| フォールバック濫用 | ✅ | `_format_response` の `or {} / or []` は次行 `if not items: raise` で受けており防御的だが許容範囲 |
+
+## 今回の指摘（new）
+
+| # | finding_id | family_tag | カテゴリ | 場所 | 問題 | 修正案 |
+|---|------------|------------|---------|------|------|--------|
+| 1 | AI-NEW-amazon-L91-host-region | dead-code | テスト専用 public 属性 / production 未使用 | `api/lib/amazon.py:91-92` | `self.host = PAAPI_HOST` / `self.region = PAAPI_REGION` を構築時に設定しているが、`api/` 配下で `self.host` / `self.region` を参照する箇所は **0 件**（`Grep "self\.host\|self\.region"` で確認）。`_post_with_retry`(L154) は `PAAPI_HOST`、`_build_signed_headers`(L140) は `PAAPI_REGION` をモジュール定数で直接参照する。テスト (`tests/unit/test_amazon.py:132-133, 498-499`) でのみ `api.host == "..."` / `api.region == "..."` をアサートしており、これは「定数を冗長に再公開した値が定数と等しい」というトートロジー検証になっている。本当に検証したい「リクエストが PA-API JP のホスト/リージョンに発行される」は `test_post_method_and_endpoint` (L142-156) と `test_returns_authorization_header_with_correct_credential_scope` で URL/Authorization の文字列レベルで網羅済み | (a) `api/lib/amazon.py:91-92` の `self.host` / `self.region` 代入を削除。(b) `tests/unit/test_amazon.py:132-133` と `:498-499` の対応アサーションを削除する。観測対象を残したい場合は `amazon_module.PAAPI_HOST == "webservices.amazon.co.jp"` のようにモジュール定数を直接アサートに置き換える（インスタンス側に再保持しない） |
+| 2 | AI-NEW-amazon-L87-typeignore | redundant-suppression | 機能していない `# type: ignore` | `api/lib/amazon.py:87-89` | `self._access_key: str = access_key  # type: ignore[assignment]` 等が 3 行並ぶが、本リポジトリには `mypy.ini` / `pyproject.toml` / `setup.cfg` が **存在しない**（`Glob` 確認済み）。`requirements-dev.txt` にも mypy なし。`api/` 配下で `# type: ignore` を使うのは本ファイルのみ（楽天/Yahoo は `# type: ignore` を一切使わない）。型チェッカーが走らない環境で `# type: ignore[assignment]` を書いても抑制対象が無く、コードベース慣習からも逸脱した「将来のために」の noise になっている。さらに 70-78 行で `if missing: raise` により `access_key` 等が `Optional[str]` から `str` であることが論理的に確定しているのに narrowing しないまま無視ディレクティブで上書きしているのも本筋違い | 直前の `if missing: raise AmazonAPIError(...)` で None 排除が確定しているので、いずれか:<br>(a) 型注釈と `# type: ignore` を両方落とし `self._access_key = access_key` のみにする (Python 慣習)<br>(b) narrowing したいなら `assert access_key is not None`(×3) を追加し `# type: ignore` を削除（mypy を後で導入してもこのまま通る）<br>のどちらかに統一。`# type: ignore` は削除する |
+| 3 | AI-NEW-aws_sigv4-L130-dictwrap | over-engineering | 単一キー dict で string 1 値を包む | `api/lib/aws_sigv4.py:130, 172`（戻り値型 `dict[str, str]` と `return {"Authorization": authorization}`） | `sign_request` は `dict[str, str]` を返すが、唯一のキーが `"Authorization"` のみ。Why コメント (`api/lib/aws_sigv4.py:133-135`) は「返却辞書を request headers にマージすれば SigV4 署名済みリクエストになる」と主張するが、唯一の本番呼び出し元 `api/lib/amazon.py:146` は `signed["Authorization"]` で **値を 1 つだけ抽出**しており、マージはしていない。テスト (`tests/unit/test_aws_sigv4.py:447-448`) も `["Authorization"]` を毎回手で剥がしている。Why の主張と実呼び出しが一致しておらず、「将来複数のヘッダを返せるようにする」という根拠のない汎用化のために型を 1 段ラップしているだけ。policy「過剰エンジニアリング: タスクに不要な抽象化レイヤーの追加」「もっともらしいが間違っている」に該当 | (a) 戻り値を `str`（Authorization ヘッダ文字列）に変更。Why コメントから誤った主張を削除。<br>(b) 呼び出し側 `api/lib/amazon.py:146` を `"Authorization": authorization,` に変更（変数名は受け取り側を `authorization = aws_sigv4.sign_request(...)` 等に）。<br>(c) `tests/unit/test_aws_sigv4.py:374-450` の 3 テストで `signed["Authorization"]` を `signed`（戻り値そのもの）に変更。 |
+| 4 | AI-NEW-amazon-L119-comment | misleading-comment | Why コメントの記述と実装の不一致 | `api/lib/amazon.py:119-120` | `_serialize_payload` のコメントが「json モジュールの **default 出力を流用する**」と書かれているが、実装は `separators=(",", ":")` を **明示指定**している。`json.dumps` のデフォルトは `(", ", ": ")`（空白あり）なので「default 出力を流用」という説明は事実と逆。本当の Why は「署名対象とリクエストボディがバイト単位で一致する必要があるため、空白を含まない決定論的シリアライゼーションを固定する」。ボイスカウト原則のもと、変更ファイル内の不正確な Why コメントは正確化する | コメントを以下のように書き換える:<br>`# Why separators=(",", ":") 固定: SigV4 の署名対象は HTTP ボディと` <br>`# バイト一致しなければならない。json.dumps のデフォルトは空白入り (", ", ": ") なので、` <br>`# 空白なしの決定論的シリアライゼーションを明示する。` |
+
+## 継続指摘（persists）
+（該当なし）
+
+## 解消済み（resolved）
+| # | finding_id | 解消根拠 |
+|---|------------|---------|
+| 1 | AI-NEW-amazon-L184 | `api/lib/amazon.py:153-179` を実コード確認。`for attempt in range(MAX_RETRIES + 1):` ループ後に到達不能な `raise` は存在しない。各イテレーションで return / continue / raise のいずれかに分岐し、最終 attempt では `attempt < MAX_RETRIES` が False になり raise に落ちるため論理的に exit が return/raise のみ |
+| 2 | AI-NEW-aws_sigv4-L122 | `api/lib/aws_sigv4.py:119-129` のシグネチャに `host` 引数なし。`api/lib/amazon.py:133-143` の `sign_request` 呼び出しに `host=` キーワード引数なし。テスト (`tests/unit/test_aws_sigv4.py:374-450`) の 3 ケースからも `host="..."` が削除済み |
+| 3 | AI-NEW-update_prices-L28 | `api/cron/update_prices.py:21-27` を実コード確認。`except AmazonAPIError as e:` ブロックは `logger.warning(...)` のみで、`result = None` の冗長代入は削除済み |
+| 4 | AI-NEW-amazon-L120 | `api/lib/amazon.py:14-21` のモジュール先頭 import 群に `import json` (L17) 追加済み。`_serialize_payload` 内に `import json` は残っていない（L117-121 を確認） |
+
+## 再開指摘（reopened）
+（該当なし）
