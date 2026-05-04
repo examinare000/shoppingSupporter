@@ -1,0 +1,69 @@
+# フロントエンドレビュー
+
+## 結果: APPROVE
+
+## サマリー
+`searchClient.ts` の fetch 化、`HomePage` の SWR 化、ローディング/エラー UI 追加の3点要件をすべて満たす実装。コンポーネント分割・状態管理・a11y・型安全性のいずれもポリシー基準を満たしており、ブロッキング指摘なし。Spinner の `role="status"` と `aria-live="polite"` 付与、`<button type="button">` でのリトライ導線、SWR `key=null` による空クエリ時の fetch スキップなど、フロントエンド観点で重要な配慮が一通り入っている。デザイン仕様書 (`docs/design/backend-api-spec.md`) は不在だが、UI トーンは既存 `EmptyState` を踏襲しており、参照可能なデザインソースとの差異は確認できない。
+
+## デザイン忠実度チェック
+
+- タスク指示書の参照資料 `docs/design/backend-api-spec.md` は **API 仕様** の SoT であり、UI/UX デザインを定めるものではない。実体ファイルも不在（plan §参照資料の調査結果で確認済み・`coder-decisions.md #5`）
+- UI 仕様は task 指示書文言（「スピナー」「リトライボタン付きエラー画面」）のみで、それ以上の視覚仕様の指定はない
+- 参照可能なトーン基準: 既存 `EmptyState`（二重罫線で囲った特集枠 + `MarginalNote`）→ `SearchErrorState` がこれを正しく踏襲している（`RuledDivider variant="double"` 上下、`px-6 py-10 text-center`、`<MarginalNote>詳細: ...</MarginalNote>`）
+- スピナーは `app/loading.tsx` の「Composing — 組版中…」スモールキャプスのトーンと整合
+- カラートークンは Tailwind 拡張（`tailwind.config.ts:31-33` の `rule` `vermilion`）経由のみで、生 16進カラー直書きなし
+
+判定: デザイン忠実度に問題なし（参照可能な仕様内で整合している）。
+
+## 検証した項目
+
+| 観点 | 結果 | 備考 |
+|------|------|------|
+| コンポーネント設計（責務分離・粒度） | ✅ | ルート/View 一体型は Next.js App Router の作法上妥当（plan で明示）。`Spinner`/`SearchErrorState` は `components/feedback/` 配下で単一責務。`SearchResultsSection` の props 契約は維持 |
+| 状態管理 | ✅ | サーバーステートは SWR、クエリ文字列は local `useState`、画像優先度は既存 `useImagePriority`。グローバル化の必要なく適切に分離 |
+| データ取得パターン | ✅ | SWR `useSWR<Product[]>` で `key = URL文字列 \| null` 方式（`coder-decisions.md #1`）。`hasQuery` で `swrKey` を null にして空クエリ時の fetch を抑止。fetcher は closure で `query` を渡す（key 変更で fetcher も同期再評価される） |
+| パフォーマンス | ✅ | SWR が dedup/キャッシュを担う。`SearchResultsSection` 内の既存 `useMemo`（ソート）はそのまま維持。不要なメモ化追加なし。`mutate` はフック由来で stable、`onRetry` の inline arrow は問題なし |
+| アクセシビリティ | ✅ | Spinner: `role="status"` + `aria-label="検索結果を読み込み中"` + `aria-live="polite"` + 装飾は `aria-hidden`。リトライ: `<button type="button">` + テキストラベル「リトライ」、装飾矢印 `↻` は `aria-hidden`。キーボード操作（Tab/Enter）も標準 button で動作 |
+| TypeScript 型安全性 | ✅ | `any` なし。レスポンス body は `as Product[]` で型アサーション（`coder-decisions.md #5` で SoT 確定後 zod 等で強化する余地あり、現時点ではスコープ外）。`SearchErrorState` の `error: unknown` を `instanceof Error` で narrow する型ガードあり |
+| 配線・到達経路 | ✅ | 新規ルート追加なし。既存 `/`（`app/page.tsx`）の `HeroSearch` フォーム送信が唯一の入口で、検索 → 状態別 UI の遷移は HomePage 内で完結。Next.js App Router 配下のため Router 配線・メニュー更新は不要 |
+| スコープ整合 | ✅ | task 指示書の3点（searchClient fetch 化 / HomePage 非同期化 / Spinner+リトライUI）すべて実装。クリープ・縮小なし |
+| デッドコード | ✅ | `frontend/lib/mock/`（旧同期 searchClient と MOCK_PRODUCTS、空ディレクトリ）すべて削除済み。`Grep MOCK_PRODUCTS\|@/lib/mock` で frontend 配下ヒット 0（生成キャッシュ `.next/cache/` のみヒット） |
+| 外部 UI ライブラリ統合 | ✅ | SWR v2 の実 API（`useSWR` / `mutate` / `SWRConfig` / `provider`）を実マウントで使用。テストは `global.fetch` のみスタブし SWR 本体はモックしない（フロント知識「外部UIライブラリとの統合」に準拠） |
+
+## 今回の指摘（new）
+
+| # | finding_id | family_tag | カテゴリ | 場所 | 問題 | 修正案 |
+|---|------------|------------|---------|------|------|--------|
+| - | - | - | - | - | 該当なし | - |
+
+## 継続指摘（persists）
+
+| # | finding_id | family_tag | 前回根拠 | 今回根拠 | 問題 | 修正案 |
+|---|------------|------------|----------|----------|------|--------|
+| - | - | - | - | - | 該当なし | - |
+
+## 解消済み（resolved）
+
+| finding_id | 解消根拠 |
+|------------|----------|
+| - | このステップでの初回レビューのため対象なし |
+
+## 再開指摘（reopened）
+
+| # | finding_id | family_tag | 解消根拠（前回） | 再発根拠 | 問題 | 修正案 |
+|---|------------|------------|----------------|---------|------|--------|
+| - | - | - | - | - | 該当なし | - |
+
+## 非ブロッキング（参考・改善余地）
+
+以下は REJECT 基準に該当せず、本タスクスコープでも追加実装は要求していないため記録のみ。今後の改善検討時の参考。
+
+| # | カテゴリ | 場所 | 観察 | 改善余地 |
+|---|---------|------|------|---------|
+| FYI-1 | a11y（任意） | `frontend/components/feedback/SearchErrorState.tsx:31-57` | エラー画面に `role="alert"` または `aria-live="assertive"` が無いため、検索 → 失敗の遷移が支援技術に自動アナウンスされない。Spinner は `role="status"`+`aria-live="polite"` で読み上げられるが、エラーへの遷移は視覚以外で気づきにくい | 別タスクで `<section role="alert">` 化、または見出し `<h2>` 付近に `aria-live="assertive"` を付与すると遷移検知が改善する。ただし task 指示書には a11y 強化要件なし、Policy「ARIA は最初から組み込む」でも「アナウンス強度」までは規定なしのため非ブロッキング |
+| FYI-2 | UX（任意） | `frontend/app/page.tsx:57-67` | リトライ押下中はスピナーが出ない。SWR v2 の `isLoading` は「初回取得 かつ data も error も無い」場合のみ true で、エラー後の `mutate()` 再検証では false のまま。エラー画面が結果到着まで残るため、ユーザーは押下が効いたか判別しづらい | `isValidating` も併用してリトライ中はリトライボタンに `aria-busy` を付ける、または Spinner を重ねる選択肢がある。task 指示書は「リトライボタン押下で再取得が走る」のみ要求し UI 表現は既存実装で満たせているため非ブロッキング |
+| FYI-3 | コード配置（任意） | `frontend/components/feedback/SearchErrorState.tsx` | `query` props を持ち検索文脈に紐付くが、配置は汎用 `feedback/` 配下。再利用想定が無いなら `components/search/` 配下に移すと「単一用途」の意図が場所からも伝わる | コンポーネント増加時に再評価で十分。現状 1 ファイルのみのため非ブロッキング |
+
+## 結論
+
+本タスクスコープ（searchClient の fetch 化 / HomePage の SWR 化 / ローディング・エラー UI）は受け入れ条件をすべて満たしており、フロントエンド観点でのブロッキング問題は無い。**APPROVE**。
