@@ -2,4 +2,4 @@
 alembic
 pytest
 pytest-asyncio
-testcontainers[postgresql]
+testcontainers
