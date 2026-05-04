@@ -12,10 +12,12 @@ Vercel へのデプロイに最適化されたサーバーレスアーキテク�
    - 紙面メタファのエディトリアルデザイン UI。
    - 現状はクライアントサイドのモックデータ駆動で動作（バックエンド API には未接続）。
 2. **API / Backend (FastAPI)**
-   - ビジネスロジックのコア。Vercel Functions 上で動作。
+   - ビジネスロジックのコア。Vercel Functions 上で動作（`api/` 配下に集約 / ADR-009）。
    - ユーザー認証、DB 操作、公式 API からのデータ取得を担う。
+   - HTTP ルータは `api/routers/`、DB アクセスは `api/repositories/`、外部 API クライアントは `api/lib/`、共通モデル / DB 接続は `api/common/`。
 3. **Database (PostgreSQL)**
    - 永続データの管理。**Neon (Serverless Postgres)** を採用（ADR-008 参照）。
+   - スキーマは Alembic（リポジトリルート `alembic/`）で管理。デプロイ前に Neon の直接接続 URL に対して `alembic upgrade head` を実行する運用（ADR-009）。
 4. **Scheduled Tasks (Vercel Cron Jobs)**
    - 定期的な価格更新処理。HTTP エンドポイントをトリガーに実行。
 
@@ -27,7 +29,7 @@ Vercel へのデプロイに最適化されたサーバーレスアーキテク�
 4. ユーザーの認証コンテキスト（JWT）に基づき、`UserProfile`（楽天ランク、所有カード等）を加味して実質価格を動的に算出（ADR-007 参照）。
 5. Frontend に結果を表示。
 
-> 現状は手順 2 / 3 の API 連携が未実装で、Frontend は `frontend/lib/mock/products.ts` のモック商品を使ってクライアントサイドで完結している。
+> 現状の進捗: 検索エンドポイント `GET /api/products/search`（FTS + pg_trgm / `docs/api/backend-spec.md`）と価格更新 Cron は実装済み。一方フロントは `frontend/lib/mock/products.ts` のモック商品でクライアント完結のままで、実 API への差し替え（ADR-005 のブリッジタスク）は未着手。手順 4 のユーザー個別計算は Phase 1 の T-08 で対応予定（`docs/plans/phase1-foundation.md`）。
 
 ## データモデル
 
@@ -128,6 +130,8 @@ Footer（ロゴ + 年）
 
 ## 関連ドキュメント
 
-- `docs/adr/` — アーキテクチャ決定記録（ADR-001〜004）
+- `docs/adr/` — アーキテクチャ決定記録（ADR-001〜009）。インデックスは `docs/adr/README.md`。
+- `docs/api/backend-spec.md` — バックエンド API 仕様
+- `docs/plans/phase1-foundation.md` — Phase 1 タスク分解と進捗
 - `agent-rules/15-frontend-design.md` — フロントエンド設計の運用ルール
 - `agent-rules/30-documentation-management.md` — ドキュメント管理ルール
