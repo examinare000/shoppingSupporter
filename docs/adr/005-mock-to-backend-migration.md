@@ -67,3 +67,11 @@ ADR-004 でフロントエンドは `frontend/lib/mock/` のモックデータ�
 
 - **ユーザー認証・セッションの方式**（Cookie / JWT / NextAuth.js など）— `UserProfile` を API に渡す手段はこの選択に依存する。別途 ADR を起票する。
 - **検索の全文検索バックエンド**（Postgres trigram / GIN / 外部の全文検索サービス）— データ量が見えてから決める。
+
+## 進捗（2026-05-04 時点）
+
+- 決定 1（`searchClient` の async 化）: ✅ 完了。`useMemo` から SWR 採用に切替済み（`frontend/lib/api/searchClient.ts`）。
+- 決定 2（`lib/mock/` のテストフィクスチャ残置）: 撤回。`frontend/lib/mock/` はフロントから完全削除済み。
+- 未決事項「ユーザー認証」: ADR-007（JWT セッション採用）で確定。
+- 未決事項「全文検索バックエンド」: Postgres FTS（`tsvector` + `websearch_to_tsquery`）+ pg_trgm に確定（ADR-009 / phase1 T-07 完了）。
+- 残課題: フロント `Product` 型と API `ProductSummary` の型契約整合（T-08 で `Listing` 同梱、T-09 で OpenAPI 経由の型生成へ寄せる）。
