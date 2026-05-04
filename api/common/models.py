@@ -83,7 +83,7 @@ class Product(Base):
     current_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     # Maintained by a Postgres BEFORE INSERT/UPDATE trigger; see
-    # backend/alembic/versions/0002_product_search_columns.py.
+    # alembic/versions/0002_product_search_columns.py.
     search_vector: Mapped[Optional[str]] = mapped_column(TSVECTOR, nullable=True)
 
     site_products: Mapped[List["EcSiteProduct"]] = relationship(back_populates="product")
