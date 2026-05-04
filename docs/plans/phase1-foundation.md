@@ -6,7 +6,7 @@
 
 本計画は ADR-006「高度な機能（還元率反映・履歴・予測）のロードマップ」のフェーズ 1（基盤整備と UserProfile 連携 / Backend First）を、ブランチ単位で着手可能なタスクゴールへ分解したもの。ADR-005「モック駆動フロントから実バックエンドへの移行戦略」で示された制約（DB 主導検索 / OpenAPI 型同期 / 実質価格計算はバックエンド主導）を前提とする。
 
-**目的**: バックエンドで「ユーザー文脈付きの実質価格」を算出して返す土台を組み、フロントが Phase 2 以降で `searchClient` を `fetch` 版へ差し替えるための足場を完成させる。
+**目的**: バックエンドで「ユーザー文脈付きの実質価格」を算出して返す土台を組み、フロントが SWR + fetch ベースの `searchClient` で安定して結果を描画できる状態を維持する（B-1 は当初プランの `useEffect` 化ではなく fetch + SWR で代替する形で完了済み）。
 
 ## スコープ
 
@@ -90,7 +90,7 @@
    - `POST /api/auth/login` — 認証成功で JWT を返す
    - `GET /api/auth/me` — 認証ユーザー情報の確認
    - `Depends(get_current_user)` を `api/common/security.py` に切り出す
-2. **シークレット管理**: `JWT_SECRET` を環境変数で受ける。`.env.example` を追加（`agent-rules/12-security-guidelines.md` 準拠でハードコード禁止）。
+2. **シークレット管理**: `JWT_SECRET` を環境変数で受ける。`.env.example` を追加（`agent-rules/12-security-guidelines.md` 準拠でハードコード禁止）。なお `.env.example` への `JWT_SECRET` 列挙はドキュメント同期 PR で先行追加済み。
 
 **完了条件**: signup → login → /me のテストが緑。誤パスワード時 401、未認証 /me で 401。
 
@@ -156,6 +156,8 @@
 
 **未着手の Phase 1 ギャップ**: 現在のレスポンスは `Product` 単体のサマリ（`ProductSummary`）のみで、`EcSiteProduct` / `Listing[]` の同梱は未実装。フロントが `types/product.ts` の `Listing` を要求する場面では T-08 と合わせてレスポンス形を再設計する。
 
+**型不整合リスク**: フロント `Product` 型は `listings: Listing[]` を必須とするが、API `ProductSummary` には `listings` を含まない。さらに API は envelope `{items, page, totalPages, totalCount}` を返すのに対し、`searchClient` は `Product[]` 直返しを期待しており、現状の `/api/products/search` 結果はフロントで描画できない。T-08（Listing 同梱）と T-09（OpenAPI 型同期）でフロントクライアントを envelope 受け取りに修正する必要がある。
+
 ---
 
 ### T-08. 検索 API への UserProfile / Card 統合
@@ -192,9 +194,10 @@
 
 これらは ADR-006 上は Phase 2 だが、Phase 1 の成果を腐らせないために連続で着手することを推奨する。本計画には含めず、Phase 2 計画起票時に細分化する。
 
-- B-1. `frontend/lib/mock/searchClient.ts` の `Promise<Product[]>` 化と `app/page.tsx` の `useEffect` 化
-- B-2. `lib/mock/` をテストフィクスチャ専用に再配置（本番バンドルから除外）
-- B-3. ゲスト → ログイン後の表示切り替え UX（ADR-006「影響」節）
+- B-1. `frontend/lib/mock/searchClient.ts` の `Promise<Product[]>` 化と `app/page.tsx` の `useEffect` 化 — ✅ 完了（SWR を採用し fetch ベース化。`useEffect` ではなく SWR で扱う形に変更）
+- B-2. `lib/mock/` をテストフィクスチャ専用に再配置（本番バンドルから除外） — 撤回（`frontend/lib/mock/` は既に削除済み）
+- B-3. 検索レスポンスの envelope 形（`{items, page, totalPages, totalCount}`）とフロント `Product` 型の整合 — 未着手（T-08 / T-09 と歩調を合わせる）
+- B-4. ゲスト → ログイン後の表示切り替え UX（ADR-006「影響」節）
 
 ## 依存グラフ（要約）
 
