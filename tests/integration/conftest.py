@@ -29,7 +29,7 @@ from sqlalchemy.orm import sessionmaker
 from testcontainers.postgres import PostgresContainer
 
 from api.common.database import get_db
-from api.common.models import Base, Product
+from api.common.models import Base, Card, Product
 from api.main import app
 
 
@@ -130,6 +130,31 @@ def make_product():
             tags=tags if tags is not None else [],
             in_stock=in_stock,
             current_price=current_price,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_card():
+    """Factory for `Card` instances with sensible test defaults.
+
+    Tests pass only the fields they care about; everything else gets a
+    deterministic placeholder. `special_rewards` defaults to `{}` (matching
+    the column's NOT NULL JSON default in `api/common/models.py`).
+    """
+
+    def _make(
+        name="テストカード",
+        base_reward_rate=1.0,
+        annual_fee=0,
+        special_rewards=None,
+    ):
+        return Card(
+            name=name,
+            base_reward_rate=base_reward_rate,
+            annual_fee=annual_fee,
+            special_rewards=special_rewards if special_rewards is not None else {},
         )
 
     return _make

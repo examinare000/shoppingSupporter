@@ -1,6 +1,6 @@
 # バックエンド API 仕様
 
-最終更新: 2026-05-04（ADR-009 統合反映）
+最終更新: 2026-05-05（T-04 Card API 実装反映）
 
 実装は `api/main.py`（FastAPI）配下。ルートは `vercel.json` のリライトで `/api/(.*) → /api/main.py` に集約され、FastAPI 内部でパスマッチする。
 
@@ -89,12 +89,24 @@ API は上記の envelope `{items, page, totalPages, totalCount}` を返すが�
 
 Vercel Cron Jobs が 1 時間ごとに叩く（`vercel.json` の `0 * * * *`）。各 `EcSiteProduct` について Amazon / 楽天 / Yahoo の公式 API を呼び、`PriceHistory` を追記する。
 
+### 2.5. Card マスタ
+`GET /api/cards` / `GET /api/cards/{id}`
+
+実装: `api/routers/cards.py`。仕様の正本は `docs/api/cards.md`（`special_rewards` の構造、初期 4 件のシード内容、投入手順を集約）。
+
+公開エンドポイント（認証不要）。書き込み系（POST/PUT/DELETE）は Phase 1 では実装せず、行の投入は `python -m api.common.seed.cards` で行う。
+
+**Response 概要:**
+
+- 一覧は bare array（envelope ではない）。並び順は `id ASC` 固定
+- 詳細は単一オブジェクト。存在しない `id` で `404`、非整数 `id` で `422`
+- フィールド: `id` / `name` / `baseRewardRate` / `annualFee` / `specialRewards`
+
 ## 3. 未実装（Phase 1 で着手予定）
 
 詳細は `docs/plans/phase1-foundation.md` を参照。
 
 - `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me`（T-03）
-- `GET /api/cards` / `GET /api/cards/{id}`（T-04）
 - `GET /api/me/profile` / `PUT /api/me/profile`（T-05）
 - 検索結果へのユーザー個別実質価格の同梱（T-08）
 
