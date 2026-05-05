@@ -20,8 +20,8 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 ## 現在の進捗
 
 - フロントエンド UI（ヒーロー検索 / 検索結果 / 画像優先度設定）は実装済み
-- バックエンド: モデル定義・公式 API クライアント・Cron 雛形に加え、`GET /api/products/search`（FTS + pg_trgm）と Alembic マイグレーション（0001 初期スキーマ + 0002 検索カラム）を実装済み
-- **Next Step**: Phase 1 残タスク（T-03/04/05/06/08 と OpenAPI 型同期 T-09）。詳細は `docs/plans/phase1-foundation.md` を参照
+- バックエンド: モデル定義・公式 API クライアント・Cron・検索 API・認証基盤・カードマスタ API を実装済み
+- **Next Step**: Phase 1 残タスク（UserProfile 連携・ポイント計算・OpenAPI 型同期）。詳細は `docs/plans/roadmap.md` を参照
 
 ## 今後のロードマップ
 
