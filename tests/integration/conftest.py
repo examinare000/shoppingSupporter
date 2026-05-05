@@ -22,6 +22,12 @@ import pytest
 os.environ.setdefault(
     "DATABASE_URL", "postgresql://placeholder@localhost/placeholder"
 )
+# `api.common.security` reads JWT_SECRET lazily on first call, but a
+# deterministic placeholder is required so the integration tests have a
+# stable, repo-known value for signing tokens. The override happens before
+# the FastAPI app is imported below so the security module can resolve
+# the secret on first use during request handling.
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-integration-only")
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
