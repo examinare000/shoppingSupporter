@@ -10,26 +10,27 @@ Vercel へのデプロイに最適化されたサーバーレスアーキテク�
 
 1. **Frontend (Next.js 14 App Router)**
    - 紙面メタファのエディトリアルデザイン UI。
-   - フロントは SWR 経由で `/api/products/search` を fetch する実装に切替済み（`frontend/lib/api/searchClient.ts`）。エラー時は `SearchErrorState` でリトライ可能。
+   - フロントは SWR 経由で `/api/products/search` を fetch する実装に切替済み（`frontend/lib/api/searchClient.ts`）。
 2. **API / Backend (FastAPI)**
-   - ビジネスロジックのコア。Vercel Functions 上で動作（`api/` 配下に集約 / ADR-009）。
+   - ビジネスロジックのコア。Vercel Functions 上で動作（`api/` 配下に集約）。
    - ユーザー認証、DB 操作、公式 API からのデータ取得を担う。
-   - HTTP ルータは `api/routers/`、DB アクセスは `api/repositories/`、外部 API クライアントは `api/lib/`、共通モデル / DB 接続は `api/common/`。
+   - 検索は Postgres FTS（`tsvector` + `websearch_to_tsquery`）+ `pg_trgm` を採用し、誤字耐性と類似度ランキングを実現。
 3. **Database (PostgreSQL)**
-   - 永続データの管理。**Neon (Serverless Postgres)** を採用（ADR-008 参照）。
-   - スキーマは Alembic（リポジトリルート `alembic/`）で管理。デプロイ前に Neon の直接接続 URL に対して `alembic upgrade head` を実行する運用（ADR-009）。
+   - 永続データの管理。**Neon (Serverless Postgres)** を採用。
+   - スキーマは Alembic で管理し、`alembic/` ディレクトリに集約。
 4. **Scheduled Tasks (Vercel Cron Jobs)**
-   - 定期的な価格更新処理。HTTP エンドポイントをトリガーに実行。
+   - 定期的な価格更新処理（`api/cron/update_prices.py`）。
 
-## データフロー（バックエンド接続後の想定）
+## データフロー
 
-1. ユーザーが商品を検索または一覧を表示。
-2. API がデータベースから既存の商品情報を取得。
-3. Vercel Cron Jobs が定期的に各 EC サイトの公式 API（Amazon・楽天・Yahoo）を呼び出し、最新の価格・ポイント情報をデータベースに保存。
-4. ユーザーの認証コンテキスト（JWT）に基づき、`UserProfile`（楽天ランク、所有カード等）を加味して実質価格を動的に算出（ADR-007 参照）。
-5. Frontend に結果を表示。
+1. ユーザーが商品を検索。
+2. API が DB から商品情報を取得。検索時は FTS と trigram 類似度でランキング。
+3. Vercel Cron が定期的に公式 API（Amazon/楽天/Yahoo）から価格を更新し `PriceHistory` に蓄積。
+4. 認証ユーザー（JWT）の場合、`UserProfile` に基づきバックエンドで実質価格を動的に算出（Phase 1 T-08 予定）。
+5. Frontend は SWR で結果を受け取り描画。
 
-> 現状の進捗: 検索エンドポイント `GET /api/products/search`（FTS + pg_trgm / `docs/api/backend-spec.md`）と価格更新 Cron は実装済み。フロントは fetch 版へ移行済み（ADR-005 ブリッジ B-1 完了相当）。残るブリッジは `Listing` 同梱型レスポンスへの整合（`ProductSummary` のままだと出品ソート不能）と、検索レスポンスの envelope 形 `{items, page, totalPages, totalCount}` とフロント側型契約の調整（B-3）。手順 4 のユーザー個別計算は Phase 1 の T-08 で対応予定（`docs/plans/phase1-foundation.md`）。
+> 現状の進捗: 検索 API（FTS+trigram）、価格更新 Cron、認証基盤（signup/login/me）、カードマスタ API は実装済み。現在は Phase 1 の残タスクである UserProfile 連携と実質価格算出ロジックの実装（T-05〜T-08）に注力している。詳細は `docs/plans/roadmap.md` を参照。
+
 
 ## データモデル
 

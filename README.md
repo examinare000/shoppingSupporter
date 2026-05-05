@@ -15,7 +15,7 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 - **Data Source**: Amazon PA-API、楽天商品検索 API、Yahoo! ショッピング商品検索 API
 - **Scheduled Tasks**: Vercel Cron Jobs（`vercel.json`）
 
-設計の詳細は `docs/tech/system-design.md`、要件定義は `docs/prd/price-comparison.md`、意思決定の経緯は `docs/adr/` を参照。
+設計の詳細は `docs/design/system-design.md`、要件定義は `docs/prd/price-comparison.md`、意思決定の経緯は `docs/adr/` を参照。
 
 ## 現在の進捗
 

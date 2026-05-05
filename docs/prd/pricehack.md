@@ -39,7 +39,7 @@
 
 ## 2. アーキテクチャ概観
 
-詳細は `docs/tech/system-design.md` および ADR 群（`docs/adr/`）参照。本 PRD では要件に直接効く決定のみ列挙する。
+詳細は `docs/design/system-design.md` および ADR 群（`docs/adr/`）参照。本 PRD では要件に直接効く決定のみ列挙する。
 
 | レイヤー | 採用技術 | 出典 |
 |---|---|---|
@@ -213,5 +213,5 @@ ADR-004 の決定どおり、新聞 / 雑誌的な紙面メタファを採用す
 - ADR: `docs/adr/001`〜`009`（インデックスは `docs/adr/README.md`）
 - Phase 計画: `docs/plans/phase1-foundation.md`
 - API 契約: `docs/api/backend-spec.md` / `docs/api/auth.md` / `docs/api/cards.md`
-- システム設計: `docs/tech/system-design.md`
+- システム設計: `docs/design/system-design.md`
 - エージェント運用: `agent-rules/`（ブランチ / TDD / フロント設計 / 文書管理）
