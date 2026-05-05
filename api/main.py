@@ -6,6 +6,7 @@ from .cron.update_prices import update_site_product
 from .routers.auth import router as auth_router
 from .routers.cards import router as cards_router
 from .routers.products import router as products_router
+from .routers.profile import router as profile_router
 import os
 
 # Create tables if they don't exist
@@ -17,6 +18,7 @@ app = FastAPI(title="pricehack API")
 app.include_router(products_router)
 app.include_router(auth_router)
 app.include_router(cards_router)
+app.include_router(profile_router)
 
 @app.get("/api/health")
 def health_check():

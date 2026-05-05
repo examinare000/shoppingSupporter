@@ -61,13 +61,28 @@ class Card(Base):
 class UserProfile(Base):
     __tablename__ = "user_profiles"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    # Why ondelete="CASCADE": user-profile.md §2.1「カスケード」。`User` 削除時
+    # に `user_profiles` を残すと参照孤児になる。bulk delete (ORM の cascade を
+    # 経由しない) でも DB レベルで連動させるため FK 側に持たせる。
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     default_card_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cards.id"))
     rakuten_rank: Mapped[RakutenRank] = mapped_column(Enum(RakutenRank), default=RakutenRank.REGULAR)
     is_amazon_prime: Mapped[bool] = mapped_column(Boolean, default=False)
     yahoo_premium: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Why onupdate: user-profile.md §2.1「`onupdate=datetime.utcnow` で自動更新」。
+    # Phase 2 で `If-Unmodified-Since` 楽観ロックの種にする伏線（同 §3.2）。
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
     user: Mapped["User"] = relationship(back_populates="profile")
+    # Why eager load 戦略はリポジトリで指定: relationship 既定は lazy。
+    # N+1 回避は `get_profile_by_user_id` の `joinedload` 1 箇所に閉じる
+    # （リレーション宣言で `lazy="joined"` を使うと、別の参照経路でも常に
+    # JOIN されてしまい意図しないコストが出る）。
+    default_card: Mapped[Optional["Card"]] = relationship()
 
 
 class Product(Base):

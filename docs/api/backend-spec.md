@@ -1,6 +1,6 @@
 # バックエンド API 仕様
 
-最終更新: 2026-05-05（T-03 Auth API 実装反映）
+最終更新: 2026-05-05（T-05 UserProfile API 実装反映）
 
 実装は `api/main.py`（FastAPI）配下。ルートは `vercel.json` のリライトで `/api/(.*) → /api/main.py` に集約され、FastAPI 内部でパスマッチする。
 
@@ -118,11 +118,25 @@ ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` �
 - `login` 失敗（未登録 email / パスワード違い）と `/me` の認証失敗は **すべて同一の 401 + 共通メッセージ**。ユーザー存在有無の漏洩を避けるため意図的に区別しない
 - リクエストボディは `extra="forbid"`。`accessToken` 等のレスポンス envelope を body に流用すると `422`
 
+### 2.7. UserProfile
+`GET /api/me/profile` / `PUT /api/me/profile`
+
+実装: `api/routers/profile.py`（HTTP 境界）、`api/repositories/user_profiles.py`（永続化、`joinedload` で `default_card` を eager load）、`api/schemas.py`（`UserProfileUpdate` / `UserProfileResponse`）。仕様の正本は `docs/api/profile.md`。
+
+認証必須（`Authorization: Bearer <token>`）。GET は未保存ユーザーに対して 200 + デフォルト値 + `updatedAt: null` を返し、DB レコードは作成しない（GET の冪等性）。PUT は全フィールド必須の全置換で、`defaultCardId: null` を「カード未設定への戻し」として受理する。
+
+**Response 概要:**
+
+- レスポンスは camelCase（`rakutenRank` / `isAmazonPrime` / `yahooPremium` / `defaultCardId` / `defaultCard` / `updatedAt`）
+- `defaultCard` は `CardResponse` 形を nested 同梱
+- リクエストボディは `extra="forbid"`。GET レスポンス形（`updatedAt` / `defaultCard`）や `accessToken` 等の envelope 流用は 422
+- バリデーション順序は (1) Pydantic（型・Enum・`extra="forbid"` / bool `strict=True`）→ (2) 認証 401 →(3) `card_exists` 422。順序を固定するためハンドラは `Depends(get_current_user)` を使わず `Header` 経由で受けて body 検証通過後に呼ぶ
+- `defaultCardId` が存在しないカードを参照した場合は 422（FK IntegrityError 経由ではなく事前 SELECT）
+
 ## 3. 未実装（Phase 1 で着手予定）
 
 詳細は `docs/plans/phase1-foundation.md` を参照。
 
-- `GET /api/me/profile` / `PUT /api/me/profile`（T-05）
 - 検索結果へのユーザー個別実質価格の同梱（T-08）
 
 ## 4. 共通エラーレスポンス
