@@ -1,6 +1,6 @@
 # Phase 1 実装計画: 基盤整備と UserProfile 連携
 
-最終更新日: 2026-05-05（T-03 完了反映）
+最終更新日: 2026-05-20（T-07 完了反映）
 
 ## 位置づけ
 
@@ -34,17 +34,15 @@
 
 ## タスクゴール一覧
 
-各タスクは 1 ブランチ = 1 目的の単位（`agent-rules/10-git-strategy.md`）。並列着手可否と依存は「依存」欄を参照。状態欄は 2026-05-04 時点。
-
 | ID | タスクゴール | 状態 | 依存 | 並列可 |
 |----|--------------|------|------|--------|
-| T-01 | Alembic 導入と初期マイグレーション | ✅ 完了（0001 初期 + 0002 検索カラム） | なし | ○ |
-| T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了（unit + integration / testcontainers Postgres） | なし | ○ |
-| T-03 | JWT 最小認証の実装 | ✅ 完了（`/api/auth/{signup,login,me}` + 共通基盤） | T-01, T-02 | × |
-| T-04 | `Card` マスタ API と初期シード | ✅ 完了（`/api/cards` 一覧・詳細 + 4 件 seed） | T-01, T-02 | T-05 と並列可 |
-| T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手（T-03 完了で着手可能） | T-03 | T-04 と並列可 |
+| T-01 | Alembic 導入と初期マイグレーション | ✅ 完了 | なし | ○ |
+| T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了 | なし | ○ |
+| T-03 | JWT 最小認証の実装 | ✅ 完了 | T-01, T-02 | × |
+| T-04 | `Card` マスタ API と初期シード | ✅ 完了 | T-01, T-02 | T-05 と並列可 |
+| T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手 | T-03 | T-04 と並列可 |
 | T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ⏳ 未着手 | T-02 | T-04, T-05 と並列可 |
-| T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了（FTS+trigram で当初予定よりリッチ。`/api/products/search`） | T-01, T-02 | T-06 と並列可 |
+| T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了 | T-01, T-02 | T-06 と並列可 |
 | T-08 | 検索 API への UserProfile / Card 統合 | ⏳ 未着手 | T-05, T-06, T-07 | × |
 | T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | ⏳ 未着手 | T-04〜T-08 のうち API 形が確定したもの | × |
 
@@ -110,7 +108,7 @@
 - 一覧は bare array（envelope なし）、`id ASC` 固定。詳細は存在しない id で 404、非整数 id で 422。
 - 認証不要（公開）。書き込み系は Phase 1 では実装せず、行の投入は `python -m api.common.seed.cards` で行う。
 - `api/common/seed/cards.py` に `CARDS_SEED_DATA`（楽天カード / Amazon Mastercard / Yahoo! JAPAN カード / 一般 1% 還元カード）と `seed_cards(db)` を実装。`cards` テーブルが空のときのみ 4 件投入する冪等な実装（`name` ユニーク制約はスキーマ変更を伴うためスコープ外）。
-- `docs/api/cards.md` を新規作成し、`special_rewards` の JSON スキーマと初期 4 件の設定根拠、投入手順を記載。`docs/api/backend-spec.md` §2.5 に Cards 節を追加。
+- `docs/api/cards.md` に `special_rewards` の JSON スキーマと初期 4 件の設定根拠、投入手順を記載。`docs/api/backend-spec.md` §2.5 に Cards 節を追加。
 - TDD: `tests/integration/test_cards.py` で 17 件（一覧の並び・空配列・camelCase 完全一致 / 詳細の 200・404・422 / 公開エンドポイント / seed の冪等性・名称一致）。全 122 件の `pytest -q` 緑。
 
 **完了条件**: シード後に `GET /api/cards` が 4 件返す。`special_rewards` の構造がドキュメントと一致する。
@@ -227,7 +225,7 @@ T-04 / T-05 / T-06 / T-07 は依存解消後に並列着手可能。サブエー
 | 認証 ADR の決定が長引き Phase 1 全体が止まる | T-03 で議論が分岐 | T-03 を「ADR 起票だけ」と「最小実装」に分割し、最小実装は ADR の暫定結論で先行可能にする |
 | 楽天 SPU の倍率定義が変動して T-06 のテストが頻繁に壊れる | 倍率テーブルがハードコードされている | `api/lib/pricing/base_rates.py` をデータクラスに閉じ込め、将来 DB / 設定ファイル化できる構造にする |
 | OpenAPI 生成の差分検知が CI コストを上げる | 生成 diff が CI で頻繁に出る | T-09 で `npm run gen:api -- --check` 形式の差分チェックモードを用意し、生成自体は開発者の手元で行う運用にする |
-| 検索 API の N+1 問題 | 商品 × 3 サイト × 価格履歴の eager load 不足 | T-07 の段階で `selectinload` を入れ、テストで SQL 発行回数を assert する（`sqlalchemy.event` で計測） |
+| 検索 API の N+1 問題 | 商品 × 3 サイト × 価格履歴の eager load 不足 | T-07 の段階で `selectinload` 入れ、テストで SQL 発行回数を assert する（`sqlalchemy.event` で計測） |
 
 ## 受け入れ基準（Phase 1 全体）
 
