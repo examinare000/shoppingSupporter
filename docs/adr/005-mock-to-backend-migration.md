@@ -68,10 +68,15 @@ ADR-004 でフロントエンドは `frontend/lib/mock/` のモックデータ�
 - **ユーザー認証・セッションの方式**（Cookie / JWT / NextAuth.js など）— `UserProfile` を API に渡す手段はこの選択に依存する。別途 ADR を起票する。
 - **検索の全文検索バックエンド**（Postgres trigram / GIN / 外部の全文検索サービス）— データ量が見えてから決める。
 
-## 進捗（2026-05-04 時点）
+## 進捗（2026-05-05 時点）
 
-- 決定 1（`searchClient` の async 化）: ✅ 完了。`useMemo` から SWR 採用に切替済み（`frontend/lib/api/searchClient.ts`）。
-- 決定 2（`lib/mock/` のテストフィクスチャ残置）: 撤回。`frontend/lib/mock/` はフロントから完全削除済み。
-- 未決事項「ユーザー認証」: ADR-007（JWT セッション採用）で確定。
-- 未決事項「全文検索バックエンド」: Postgres FTS（`tsvector` + `websearch_to_tsquery`）+ pg_trgm に確定（ADR-009 / phase1 T-07 完了）。
-- 残課題: フロント `Product` 型と API `ProductSummary` の型契約整合（T-08 で `Listing` 同梱、T-09 で OpenAPI 経由の型生成へ寄せる）。
+- 決定 1（`searchClient` の async 化）: ✅ 完了。SWR 採用により `fetch` ベースの実装へ移行済み（`frontend/lib/api/searchClient.ts`）。
+- 決定 2（`lib/mock/` のテストフィクスチャ残置）: 撤回。コードベースのクリーンアップのため `frontend/lib/mock/` は削除済み。
+- 未決事項「ユーザー認証」: ✅ 完了。ADR-007 に基づき JWT 認証（signup/login/me）が実装済み。
+- 未決事項「全文検索バックエンド」: ✅ 完了。Postgres FTS + pg_trgm が実装済み（ADR-010）。
+- フェーズ 1 タスク:
+    - T-03: JWT 認証基盤 ✅ 完了
+    - T-04: Card マスタ API ✅ 完了
+    - T-05: UserProfile API ✅ 完了
+    - T-07: 商品検索 API（匿名版） ✅ 完了
+- 残課題: フロント `Product` 型と API `ProductSummary` の型契約整合（T-08 で `Listing` 同梱、T-09 で OpenAPI 経由の型生成へ寄せる）。現状、API 側の envelope 形式とフロントの期待値に乖離があるため、結合の最終フェーズで解消する。

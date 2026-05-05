@@ -21,7 +21,7 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 
 - フロントエンド UI（ヒーロー検索 / 検索結果 / 画像優先度設定）は実装済み
 - バックエンド: モデル定義・公式 API クライアント・Cron・検索 API・認証基盤・カードマスタ API を実装済み
-- **Next Step**: Phase 1 残タスク（UserProfile 連携・ポイント計算・OpenAPI 型同期）。詳細は `docs/plans/roadmap.md` を参照
+- **Next Step**: Phase 1 残タスク（ポイント計算・OpenAPI 型同期）。詳細は `docs/plans/roadmap.md` を参照
 
 ## 今後のロードマップ
 
@@ -29,8 +29,8 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 
 
 ### Phase 1: モック脱却とパーソナライズ基盤
-- フロント fetch 接続は完了済み（残: `UserProfile` / `Card` 連携と検索レスポンスへの `Listing` 同梱／T-08）
-- `UserProfile` / `Card` 連携によるユーザー固有の還元率反映
+- フロント fetch 接続は完了済み（残: 検索レスポンスへの `Listing` 同梱／T-08）
+- `UserProfile` / `Card` 連携によるユーザー固有の還元率反映（UserProfile API 実装済み）
 - バックエンドでの実質価格計算ロジックの実装
 
 ### Phase 2: 価格履歴と可視化

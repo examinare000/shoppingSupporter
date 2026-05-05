@@ -1,0 +1,53 @@
+services:
+  app:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/shoppingsupporter
+      - JWT_SECRET=dev-secret-key-change-me-in-production
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - pip_cache:/root/.cache/pip
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: shoppingsupporter
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shoppingsupporter"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Profile for running migrations or tests
+  tools:
+    build:
+      context: .
+      target: development
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/shoppingsupporter
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: [tools]
+
+volumes:
+  postgres_data:
+  pip_cache:
