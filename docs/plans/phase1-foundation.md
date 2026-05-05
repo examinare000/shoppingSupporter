@@ -1,6 +1,6 @@
 # Phase 1 実装計画: 基盤整備と UserProfile 連携
 
-最終更新日: 2026-05-04（ADR-009 / T-01・T-02・T-07 完了反映）
+最終更新日: 2026-05-05（T-04 完了反映）
 
 ## 位置づけ
 
@@ -41,7 +41,7 @@
 | T-01 | Alembic 導入と初期マイグレーション | ✅ 完了（0001 初期 + 0002 検索カラム） | なし | ○ |
 | T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了（unit + integration / testcontainers Postgres） | なし | ○ |
 | T-03 | JWT 最小認証の実装 | ⏳ 未着手 | T-01, T-02 | × |
-| T-04 | `Card` マスタ API と初期シード | ⏳ 未着手 | T-01, T-02 | T-05 と並列可 |
+| T-04 | `Card` マスタ API と初期シード | ✅ 完了（`/api/cards` 一覧・詳細 + 4 件 seed） | T-01, T-02 | T-05 と並列可 |
 | T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手 | T-03 | T-04 と並列可 |
 | T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ⏳ 未着手 | T-02 | T-04, T-05 と並列可 |
 | T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了（FTS+trigram で当初予定よりリッチ。`/api/products/search`） | T-01, T-02 | T-06 と並列可 |
@@ -96,15 +96,18 @@
 
 ---
 
-### T-04. `Card` マスタ API と初期シード
+### T-04. `Card` マスタ API と初期シード ✅
 
 **なぜ**: `UserProfile.default_card_id` は `cards.id` を参照する FK のため、Card 行が無いと Profile を完成させられない。Phase 1 のポイント加算ロジックも Card の `special_rewards` を読む。
 
-**やること**:
-- `GET /api/cards`（一覧）と `GET /api/cards/{id}`（詳細）を実装。書き込み系は管理者専用に限定し、Phase 1 では起票のみ（実装は seed スクリプトで賄う）
-- `api/common/seed/cards.py` に楽天カード / Amazon Mastercard / Yahoo! JAPAN カード / 一般 1% 還元カード の 4 件を投入
-- `special_rewards` の JSON スキーマを `docs/api/cards.md` に記載（サイト名 → 倍率の dict）
-- TDD: 一覧の並び・取得・404 を網羅
+**実装結果**:
+- `api/routers/cards.py` を新設し `GET /api/cards`（一覧）と `GET /api/cards/{id}`（詳細）を実装。`api/main.py` で include。
+- レスポンスは camelCase（`baseRewardRate` / `annualFee` / `specialRewards`）。`api/schemas.py` に `CardResponse` を追加し `response_model_by_alias=True` で配信。
+- 一覧は bare array（envelope なし）、`id ASC` 固定。詳細は存在しない id で 404、非整数 id で 422。
+- 認証不要（公開）。書き込み系は Phase 1 では実装せず、行の投入は `python -m api.common.seed.cards` で行う。
+- `api/common/seed/cards.py` に `CARDS_SEED_DATA`（楽天カード / Amazon Mastercard / Yahoo! JAPAN カード / 一般 1% 還元カード）と `seed_cards(db)` を実装。`cards` テーブルが空のときのみ 4 件投入する冪等な実装（`name` ユニーク制約はスキーマ変更を伴うためスコープ外）。
+- `docs/api/cards.md` を新規作成し、`special_rewards` の JSON スキーマと初期 4 件の設定根拠、投入手順を記載。`docs/api/backend-spec.md` §2.5 に Cards 節を追加。
+- TDD: `tests/integration/test_cards.py` で 17 件（一覧の並び・空配列・camelCase 完全一致 / 詳細の 200・404・422 / 公開エンドポイント / seed の冪等性・名称一致）。全 122 件の `pytest -q` 緑。
 
 **完了条件**: シード後に `GET /api/cards` が 4 件返す。`special_rewards` の構造がドキュメントと一致する。
 
