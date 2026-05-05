@@ -1,6 +1,6 @@
 # バックエンド API 仕様
 
-最終更新: 2026-05-05（T-04 Card API 実装反映）
+最終更新: 2026-05-05（T-03 Auth API 実装反映）
 
 実装は `api/main.py`（FastAPI）配下。ルートは `vercel.json` のリライトで `/api/(.*) → /api/main.py` に集約され、FastAPI 内部でパスマッチする。
 
@@ -8,7 +8,7 @@
 
 - **Base URL**: `/api`
 - **形式**: JSON（フィールド名は camelCase）
-- **認証**: 検索系は当面公開エンドポイント。ユーザー文脈付きの API は `Authorization: Bearer <JWT>`（ADR-007）。
+- **認証**: 検索系・Card マスタは公開エンドポイント。ユーザー文脈付きの API は `Authorization: Bearer <JWT>`（ADR-007）。JWT の発行は `/api/auth/login`（§2.6）。
 
 ## 2. 実装済みエンドポイント
 
@@ -102,11 +102,26 @@ Vercel Cron Jobs が 1 時間ごとに叩く（`vercel.json` の `0 * * * *`）�
 - 詳細は単一オブジェクト。存在しない `id` で `404`、非整数 `id` で `422`
 - フィールド: `id` / `name` / `baseRewardRate` / `annualFee` / `specialRewards`
 
+### 2.6. 認証
+`POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me`
+
+実装: `api/routers/auth.py`（HTTP 境界）、`api/common/security.py`（bcrypt / JWT / `Depends(get_current_user)` の集約）、`api/repositories/users.py`（永続化）。仕様の正本は `docs/api/auth.md`。
+
+ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` 署名）を発行し、以降の認証必須エンドポイントは `Authorization: Bearer <token>` で受け付ける。トークン失効は今は実装せず、有効期限（60 分）に依る。
+
+**Response 概要:**
+
+- `signup` は `201 Created` で `UserResponse`（`id` / `email` / `createdAt`）。`hashedPassword` は返さない
+- `login` は `200` で `TokenResponse`（`accessToken` / `tokenType="bearer"`）
+- `/me` は `200` で `UserResponse`。`Authorization: Bearer <token>` 必須
+- `signup` の email 重複は `409`（状態競合の意味的表現として `IntegrityError` 救済より優先）
+- `login` 失敗（未登録 email / パスワード違い）と `/me` の認証失敗は **すべて同一の 401 + 共通メッセージ**。ユーザー存在有無の漏洩を避けるため意図的に区別しない
+- リクエストボディは `extra="forbid"`。`accessToken` 等のレスポンス envelope を body に流用すると `422`
+
 ## 3. 未実装（Phase 1 で着手予定）
 
 詳細は `docs/plans/phase1-foundation.md` を参照。
 
-- `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me`（T-03）
 - `GET /api/me/profile` / `PUT /api/me/profile`（T-05）
 - 検索結果へのユーザー個別実質価格の同梱（T-08）
 
