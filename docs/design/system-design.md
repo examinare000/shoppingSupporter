@@ -32,12 +32,21 @@ Vercel へのデプロイに最適化されたサーバーレスアーキテク�
 > 現状の進捗: 検索 API（FTS+trigram）、価格更新 Cron、認証基盤（signup/login/me）、カードマスタ API は実装済み。現在は Phase 1 の残タスクである UserProfile 連携と実質価格算出ロジックの実装（T-05〜T-08）に注力している。詳細は `docs/plans/roadmap.md` を参照。
 
 
-## データモデル
+## 主要モジュールと詳細設計
 
+各機能の具体的な内部仕様については、以下の詳細設計書（Design Docs）を参照。
+
+- [UserProfile API](user-profile.md): ユーザー属性管理と DB 構造
+- [ポイント算出エンジン](pricing-engine.md): サイト別還元ルールの計算ロジック
+- [検索結果のパーソナライズ統合](search-personalization.md): ユーザー属性と検索結果の紐付けフロー
+- [価格履歴とチャート表示](price-history.md): 時系列データの管理と可視化戦略 (Phase 2)
+
+## データモデル
+...
 詳細は `api/common/models.py` を参照。主要エンティティは以下。
 
-- `User` — 認証情報（email / hashed_password）
-- `UserProfile` — 楽天ランク、Amazon Prime / Yahoo Premium 加入有無、デフォルトカード参照
+- `User` — 認証情報（email / hashed_password / created_at）
+- `UserProfile` — 楽天ランク、Amazon Prime / Yahoo Premium 加入有無、デフォルトカード参照、updated_at。`User` 削除時に CASCADE 削除
 - `Card` — クレジットカードマスタ（基本還元率、年会費、サイト別特典）
 - `Product` — 商品基本情報（JAN コード等、サイト共通）
 - `EcSiteProduct` — サイトごとの商品詳細（ASIN / ItemCode 等）

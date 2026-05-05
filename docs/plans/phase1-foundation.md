@@ -120,12 +120,14 @@
 **なぜ**: Phase 1 のゴールである「ユーザー個別の実質価格」を出すために、ユーザーが楽天ランク・Prime 加入・既定カードを登録できる必要がある。
 
 **やること**:
-- `GET /api/me/profile` — 認証ユーザーの Profile を返す。未作成ならデフォルト値（`REGULAR` / 全フラグ false / `default_card_id=null`）で返す
-- `PUT /api/me/profile` — `rakuten_rank` / `is_amazon_prime` / `yahoo_premium` / `default_card_id` を更新（部分更新 or 全置換のどちらかに統一し、ADR-007 と整合させる）
-- 入力バリデーション: `default_card_id` は `cards` に存在することを確認（外部キー違反より前に 422 で返す）
+- `GET /api/me/profile` — 認証ユーザーの Profile を返す。未作成なら 200 OK でデフォルト値（`regular` / 全フラグ false / `default_card_id=null`）を返す
+- `PUT /api/me/profile` — `rakuten_rank` / `is_amazon_prime` / `yahoo_premium` / `default_card_id` を更新。**全フィールド必須の全置換（PUT）**に統一する
+- 入力バリデーション: `default_card_id` は `cards` に存在することを確認（リポジトリ層で SELECT 1 し、外部キー違反より前に 422 で返す）
+- `updated_at` カラムの追加: Alembic マイグレーションで追加し、自動更新を有効化する
+- Enum 連携: `RakutenRank` は JSON 上で**小文字（value）**を使用する
 - TDD: 未認証 401 / 不正カード ID 422 / 正常更新の往復確認
 
-**完了条件**: `PUT` 後に `GET` で同値が返る。401/422 が網羅される。
+**完了条件**: `PUT` 後に `GET` で同値が返る。401/422 が網羅される。`updated_at` が正しく更新される。
 
 ---
 
