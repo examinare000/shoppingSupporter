@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from .common.database import get_db, engine
 from .common.models import Base, Product, EcSiteProduct
 from .cron.update_prices import update_site_product
+from .routers.auth import router as auth_router
 from .routers.cards import router as cards_router
 from .routers.products import router as products_router
 import os
@@ -14,6 +15,7 @@ app = FastAPI(title="pricehack API")
 # 検索系エンドポイント (/api/products/search) は router に分離。
 # /api/products（全件返却）はレガシー互換のため main.py 直下に残置。
 app.include_router(products_router)
+app.include_router(auth_router)
 app.include_router(cards_router)
 
 @app.get("/api/health")
@@ -38,5 +40,5 @@ async def trigger_update_prices(
     site_products = db.query(EcSiteProduct).all()
     for sp in site_products:
         await update_site_product(db, sp)
-    
+
     return {"status": "success", "updated_count": len(site_products)}

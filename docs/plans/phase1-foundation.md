@@ -1,6 +1,6 @@
 # Phase 1 実装計画: 基盤整備と UserProfile 連携
 
-最終更新日: 2026-05-05（T-04 完了反映）
+最終更新日: 2026-05-05（T-03 完了反映）
 
 ## 位置づけ
 
@@ -40,9 +40,9 @@
 |----|--------------|------|------|--------|
 | T-01 | Alembic 導入と初期マイグレーション | ✅ 完了（0001 初期 + 0002 検索カラム） | なし | ○ |
 | T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了（unit + integration / testcontainers Postgres） | なし | ○ |
-| T-03 | JWT 最小認証の実装 | ⏳ 未着手 | T-01, T-02 | × |
+| T-03 | JWT 最小認証の実装 | ✅ 完了（`/api/auth/{signup,login,me}` + 共通基盤） | T-01, T-02 | × |
 | T-04 | `Card` マスタ API と初期シード | ✅ 完了（`/api/cards` 一覧・詳細 + 4 件 seed） | T-01, T-02 | T-05 と並列可 |
-| T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手 | T-03 | T-04 と並列可 |
+| T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手（T-03 完了で着手可能） | T-03 | T-04 と並列可 |
 | T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ⏳ 未着手 | T-02 | T-04, T-05 と並列可 |
 | T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了（FTS+trigram で当初予定よりリッチ。`/api/products/search`） | T-01, T-02 | T-06 と並列可 |
 | T-08 | 検索 API への UserProfile / Card 統合 | ⏳ 未着手 | T-05, T-06, T-07 | × |
@@ -80,17 +80,21 @@
 
 ---
 
-### T-03. JWT 最小認証の実装
+### T-03. JWT 最小認証の実装 ✅
 
 **なぜ**: `UserProfile` をユーザーに紐付けて返すには、リクエスト主体の特定が必要。ADR-007 で決定した JWT 方式を実装する。
 
-**やること**:
-1. **エンドポイント実装**:
-   - `POST /api/auth/signup` — メアド + パスワード（bcrypt ハッシュ化）
-   - `POST /api/auth/login` — 認証成功で JWT を返す
-   - `GET /api/auth/me` — 認証ユーザー情報の確認
-   - `Depends(get_current_user)` を `api/common/security.py` に切り出す
-2. **シークレット管理**: `JWT_SECRET` を環境変数で受ける。`.env.example` を追加（`agent-rules/12-security-guidelines.md` 準拠でハードコード禁止）。なお `.env.example` への `JWT_SECRET` 列挙はドキュメント同期 PR で先行追加済み。
+**実装結果**:
+- `api/routers/auth.py` を新設し `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me` を実装。`api/main.py` で include。
+- `api/common/security.py` に bcrypt（`hash_password` / `verify_password`）と JWT（HS256 / 60 分有効期限の `create_access_token` / `decode_access_token`）、および `Depends(get_current_user)` を集約。`bcrypt` / `pyjwt` の import はこの 1 モジュールに閉じる。
+- `api/repositories/users.py` で `get_user_by_email` / `get_user_by_id` / `create_user` を実装。ルーターは ORM を直接触らない。
+- `api/schemas.py` に `SignupRequest` / `LoginRequest` / `TokenResponse` / `UserResponse` を追加。レスポンスは camelCase（`accessToken` / `tokenType` / `createdAt`）、`response_model_by_alias=True` で配信。`SignupRequest` / `LoginRequest` は `extra="forbid"` で envelope 形（`accessToken` 等）の流用を 422 で弾く。
+- 401 の正規化: `get_current_user` 経由の失敗（ヘッダ欠落・スキーム違い・改ざん・期限切れ・sub 不正・ユーザー不在）はすべて `INVALID_CREDENTIALS_MESSAGE` の 401 に集約。login も未登録 email とパスワード違いを区別せず同一 401 を返す（ユーザー存在有無の漏洩防止）。
+- 重複 email は signup 側で先行 SELECT して 409（IntegrityError 救済より状態競合の意味的表現を優先）。
+- `JWT_SECRET` は `_get_jwt_secret()` で遅延参照（モジュール import 時に raise しないことで conftest の `setdefault` 注入順序と両立）。空文字も「未設定」として `RuntimeError`。
+- 依存追加: `pyjwt` / `bcrypt` / `email-validator` を `requirements.txt` に追加。
+- 仕様の正本: `docs/api/auth.md`（contract と 401 共通化の意図、テスト観点を集約）。`docs/api/backend-spec.md` §2.6 に Auth 節を追加。
+- TDD: `tests/unit/test_security.py` 13 件（hash 往復 / JWT round-trip / tampered / expired / fail-fast）と `tests/integration/test_auth.py` 27 件（signup→login→/me の HTTP 契約 / 重複 409 / 401 共通化 / camelCase）。全 162 件の `pytest -q` 緑。
 
 **完了条件**: signup → login → /me のテストが緑。誤パスワード時 401、未認証 /me で 401。
 
