@@ -158,24 +158,20 @@
 - 入力エラーは 200+空配列ではなく 422（`q` 欠落・空・101 文字以上、`priceMin > priceMax`、非数 / 負数、不正な `sort`、`page` ≤ 0 など）。
 - TDD: 105 件中 52 件が本機能のテスト（FTS / trigram / フィルタ / ソート / ページング / 422 / クエリストリング契約）。
 
-**未着手の Phase 1 ギャップ**: 現在のレスポンスは `Product` 単体のサマリ（`ProductSummary`）のみで、`EcSiteProduct` / `Listing[]` の同梱は未実装。フロントが `types/product.ts` の `Listing` を要求する場面では T-08 と合わせてレスポンス形を再設計する。
-
-**型不整合リスク**: フロント `Product` 型は `listings: Listing[]` を必須とするが、API `ProductSummary` には `listings` を含まない。さらに API は envelope `{items, page, totalPages, totalCount}` を返すのに対し、`searchClient` は `Product[]` 直返しを期待しており、現状の `/api/products/search` 結果はフロントで描画できない。T-08（Listing 同梱）と T-09（OpenAPI 型同期）でフロントクライアントを envelope 受け取りに修正する必要がある。
+**型不整合リスク**: フロント `Product` 型は `listings: Listing[]` を必須とするが、現在の API レスポンス形は envelope `{items, page, totalPages, totalCount}` であり、`searchClient` は `Product[]` 直返しを期待している。このため、現状の `/api/products/search` 結果はフロントで描画できない。T-09（OpenAPI 型同期）にてフロントクライアントを envelope 受け取りに修正し、型を同期させる必要がある。
 
 ---
 
-### T-08. 検索 API への UserProfile / Card 統合
+### T-08. 検索 API への UserProfile / Card 統合 ✅
 
 **なぜ**: 「ユーザーごとの実質価格」を返すという Phase 1 の主目的を満たす最後のピース。匿名アクセス時のフォールバック挙動も同時に確定させる。
 
-**やること**:
-- `Depends(get_current_user_optional)` を新設し、未認証でも 200 を返す扱いにする
-- 認証ありの場合は `UserProfile` と `default_card` を引いて T-06 の関数群へ渡し、各 `Listing` に `points` / `effectivePrice` / `breakdown` を載せる
-- 認証なしの場合は `profile=None, card=None` でフォールバック計算（=現状フロントと同じ素の式）
-- レスポンスに `personalization: { applied: bool, profile_summary?: ... }` を追加し、フロントの表示分岐を簡単にする
-- TDD: 認証あり / なし両方で同じクエリの結果を比較し、`points` の差分が期待値どおりであること
-
-**完了条件**: 楽天ダイヤモンド + 楽天カード保有ユーザーの楽天サイト商品で SPU 加算が反映される。匿名で同じリクエストを叩くと素の値に戻る。
+**実装結果**:
+- `Depends(get_current_user_optional)` を使用し、未認証でも 200 を返すように実装。
+- 認証ありの場合は `UserProfile` と `default_card` を引いて T-06 の関数群へ渡し、各 `Listing` に `points` / `effectivePrice` / `breakdown` を載せて返す。
+- 認証なしの場合は `points` / `effectivePrice` / `breakdown` を `null` で返す（T-08 設計方針）。
+- レスポンスの `meta` フィールドに `personalization: { applied: bool, rakutenRank?: string, hasCard: bool }` を追加。
+- TDD: `tests/integration/test_product_search.py` にて認証あり/なし、プロフィール有無、カード有無の全パターンを網羅。
 
 ---
 

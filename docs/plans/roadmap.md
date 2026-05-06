@@ -23,7 +23,7 @@
 - [x] T-05: UserProfile API（モバイル・PayPay 連携フラグ拡張済み）
 - [x] T-07: DB 主導の商品検索 API（FTS + pg_trgm）
 - [x] T-06: サイト別ポイント算出ロジックの純粋関数化（api/lib/pricing/engine.py）
-- [ ] T-08: 検索 API への UserProfile / Card 統合
+- [x] T-08: 検索 API への UserProfile / Card 統合
 - [ ] T-09: OpenAPI → TypeScript 型生成パイプライン
 
 ### Phase 2: 価格履歴の可視化 (Frontend Focus)
