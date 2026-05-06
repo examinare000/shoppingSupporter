@@ -61,6 +61,8 @@ def upsert_profile(
     rakuten_rank: RakutenRank,
     is_amazon_prime: bool,
     yahoo_premium: bool,
+    is_rakuten_mobile: bool,
+    is_paypay_linked: bool,
     default_card_id: Optional[int],
 ) -> UserProfile:
     """`user_id` をキーに UserProfile を全置換 UPSERT する。
@@ -72,7 +74,9 @@ def upsert_profile(
     Why keyword-only:
         既存 `create_user(db, *, email, hashed_password)` の慣習に揃え、
         ブール値の位置間違い（`is_amazon_prime` と `yahoo_premium` の
-        スワップ等）を呼び出し時に検出する。
+        スワップ等）を呼び出し時に検出する。`is_rakuten_mobile` /
+        `is_paypay_linked` を追加してもパラメータスワップが起きないよう、
+        keyword-only を継続する。
     """
     existing = (
         db.query(UserProfile)
@@ -85,6 +89,8 @@ def upsert_profile(
             rakuten_rank=rakuten_rank,
             is_amazon_prime=is_amazon_prime,
             yahoo_premium=yahoo_premium,
+            is_rakuten_mobile=is_rakuten_mobile,
+            is_paypay_linked=is_paypay_linked,
             default_card_id=default_card_id,
         )
         db.add(existing)
@@ -92,6 +98,8 @@ def upsert_profile(
         existing.rakuten_rank = rakuten_rank
         existing.is_amazon_prime = is_amazon_prime
         existing.yahoo_premium = yahoo_premium
+        existing.is_rakuten_mobile = is_rakuten_mobile
+        existing.is_paypay_linked = is_paypay_linked
         existing.default_card_id = default_card_id
     db.commit()
 

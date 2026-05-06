@@ -99,38 +99,67 @@ class CardResponse(BaseModel):
     special_rewards: Dict[str, float] = Field(serialization_alias="specialRewards")
 
 
-class UserProfileUpdate(BaseModel):
+class UserProfileBase(BaseModel):
+    """UserProfile の共通フィールド定義。
+
+    Why Base クラス:
+        Update (PUT) と Response (GET) で同じフィールド名・エイリアス定義を
+        共有し、エイリアスの付け忘れや型の不一致を構造的に防ぐ。
+        ADR-013 §4 の「個別指定」を維持しつつ、冗長性を排除する。
+
+    Why populate_by_name:
+        validation_alias を指定すると Pydantic 既定ではフィールド名での
+        コンストラクトが不可になる。`api/routers/profile.py` の
+        `_default_response()` 等で snake_case 属性名を用いて Pydantic
+        インスタンスを生成可能にするため、このフラグを有効にする。
+    """
+    model_config = ConfigDict(populate_by_name=True)
+
+    rakuten_rank: RakutenRank = Field(
+        validation_alias="rakutenRank", serialization_alias="rakutenRank"
+    )
+    is_amazon_prime: bool = Field(
+        validation_alias="isAmazonPrime",
+        serialization_alias="isAmazonPrime",
+        strict=True,
+    )
+    yahoo_premium: bool = Field(
+        validation_alias="yahooPremium", serialization_alias="yahooPremium", strict=True
+    )
+    # Why is_rakuten_mobile / is_paypay_linked: docs/plans/user-profile-enhancement.md
+    # §2.1 の追加フラグ。`is_amazon_prime` と同じ strict=True パターンで
+    # ゆるい bool 強制（"yes"/"true"/1）を 422 で弾く。
+    is_rakuten_mobile: bool = Field(
+        validation_alias="isRakutenMobile",
+        serialization_alias="isRakutenMobile",
+        strict=True,
+    )
+    is_paypay_linked: bool = Field(
+        validation_alias="isPayPayLinked",
+        serialization_alias="isPayPayLinked",
+        strict=True,
+    )
+    # Optional[int] にデフォルトは付けない（PUT 全置換セマンティクス: 省略は
+    # 422、明示 null は 200 受理）。docs/design/user-profile.md §3.2。
+    default_card_id: Optional[int] = Field(
+        validation_alias="defaultCardId", serialization_alias="defaultCardId"
+    )
+
+
+class UserProfileUpdate(UserProfileBase):
     # Why extra="forbid": response envelope（`accessToken` 等）や GET レスポンスの
     # 形（`updatedAt` / `defaultCard` を含む）を body にそのまま流用された場合に
     # 422 で弾く。ADR-013 §2 / docs/design/user-profile.md §3.3 の必須要件。
-    model_config = ConfigDict(extra="forbid")
-
-    # Why validation_alias: 入力 JSON は camelCase（HTTP 契約）、Python 属性は
-    # snake_case（リポジトリと統一）。ADR-013 §4「個別指定」に従い、フィールド
-    # 単位で入力エイリアスを宣言する（`alias_generator` の一括変換は禁止）。
-    rakuten_rank: RakutenRank = Field(validation_alias="rakutenRank")
-    # Why strict=True for bool: Pydantic v2 既定のゆるい bool 強制（"yes" /
-    # "true" / 1 等を bool に変換）を無効化する。ADR-013 §2 の `extra="forbid"`
-    # と同じ趣旨で、HTTP 契約上 boolean のみを受理することを Pydantic レベル
-    # で固定する（user-profile.md §3.3 / 422 で弾く）。
-    is_amazon_prime: bool = Field(validation_alias="isAmazonPrime", strict=True)
-    yahoo_premium: bool = Field(validation_alias="yahooPremium", strict=True)
-    # Optional[int] にデフォルトは付けない（PUT 全置換セマンティクス: 省略は
-    # 422、明示 null は 200 受理）。docs/design/user-profile.md §3.2。
-    default_card_id: Optional[int] = Field(validation_alias="defaultCardId")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
-class UserProfileResponse(BaseModel):
+class UserProfileResponse(UserProfileBase):
     # ORM の UserProfile 行（`default_card` を joinedload 済み）をそのまま
     # 返却できるようにする。GET 未保存時はハンドラ側で UserProfileResponse の
     # インスタンスを直接構築するため、from_attributes と通常コンストラクトの
     # 両方を経路として使う。
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    rakuten_rank: RakutenRank = Field(serialization_alias="rakutenRank")
-    is_amazon_prime: bool = Field(serialization_alias="isAmazonPrime")
-    yahoo_premium: bool = Field(serialization_alias="yahooPremium")
-    default_card_id: Optional[int] = Field(serialization_alias="defaultCardId")
     # nested CardResponse: 検索パーソナライズ統合 (T-08) と方針を揃え、
     # joinedload で取得した Card を nested 返却する（フロント設定画面が ID
     # から名前を引くための追加リクエストを不要にする）。

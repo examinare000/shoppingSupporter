@@ -48,6 +48,11 @@ def _default_response() -> UserProfileResponse:
         rakuten_rank=RakutenRank.REGULAR,
         is_amazon_prime=False,
         yahoo_premium=False,
+        # docs/plans/user-profile-enhancement.md §2.1 の追加フラグも未保存時は
+        # false（DB のカラム default と一致させ、初回 PUT 前後で破壊的変化が
+        # 起きないことを保証する）。
+        is_rakuten_mobile=False,
+        is_paypay_linked=False,
         default_card_id=None,
         default_card=None,
         # `updatedAt: null` で「保存済み（datetime 値）」と区別する。
@@ -117,5 +122,7 @@ def update_profile(
         rakuten_rank=payload.rakuten_rank,
         is_amazon_prime=payload.is_amazon_prime,
         yahoo_premium=payload.yahoo_premium,
+        is_rakuten_mobile=payload.is_rakuten_mobile,
+        is_paypay_linked=payload.is_paypay_linked,
         default_card_id=payload.default_card_id,
     )
