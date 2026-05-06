@@ -22,7 +22,9 @@
 | `user_id` | UUID | PK, FK(`users.id`) `ON DELETE CASCADE` | ユーザー ID |
 | `rakuten_rank` | Enum | NOT NULL（既定 `regular`） | 楽天会員ランク（`regular` / `silver` / `gold` / `platinum` / `diamond`） |
 | `is_amazon_prime` | boolean | NOT NULL（既定 false） | Amazon Prime 加入有無 |
+| `is_rakuten_mobile` | boolean | NOT NULL（既定 false） | 楽天モバイル契約有無（SPU 判定用） |
 | `yahoo_premium` | boolean | NOT NULL（既定 false） | Yahoo! プレミアム（LYP）加入有無 |
+| `is_paypay_linked` | boolean | NOT NULL（既定 false） | PayPay / LINE 連携有無（Yahoo! 特典判定用） |
 | `default_card_id` | integer | FK(`cards.id`) NULL 許容 | 既定のクレジットカード（未設定可） |
 | `updated_at` | datetime | NOT NULL（`onupdate=datetime.utcnow`） | 更新日時。Phase 2 の `If-Unmodified-Since` 楽観ロックの伏線 |
 
@@ -30,7 +32,7 @@
 
 ## 3. エンドポイント
 
-レスポンスは camelCase（`rakutenRank` / `isAmazonPrime` / `yahooPremium` / `defaultCardId` / `defaultCard` / `updatedAt`）。`response_model_by_alias=True` で wire format を camelCase に固定する。リクエスト body も camelCase で受け付ける（`Field(validation_alias=...)`）。
+レスポンスは camelCase（`rakutenRank` / `isAmazonPrime` / `isRakutenMobile` / `yahooPremium` / `isPayPayLinked` / `defaultCardId` / `defaultCard` / `updatedAt`）。`response_model_by_alias=True` で wire format を camelCase に固定する。リクエスト body も camelCase で受け付ける（`Field(validation_alias=...)`）。
 
 ### 3.1. 取得 `GET /api/me/profile`
 
@@ -42,7 +44,9 @@
 {
   "rakutenRank": "regular",
   "isAmazonPrime": false,
+  "isRakutenMobile": false,
   "yahooPremium": false,
+  "isPayPayLinked": false,
   "defaultCardId": null,
   "defaultCard": null,
   "updatedAt": null
@@ -119,11 +123,7 @@ Phase 1 は **last-write-wins**。楽観ロックは持たない。`updated_at` 
 
 ## 6. マイグレーション
 
-`alembic/versions/0003_user_profile_updated_at.py` は以下を実施:
+実装の変遷は以下のマイグレーションファイルに集約される。いずれも本番環境での無停止適用を考慮し、列追加・backfill・NOT NULL 設定を分離した 3 ステップロールアウトを採用している（`agent-rules/50-production-reliability.md` 参照）。
 
-1. `updated_at` カラムを `nullable=True` で追加
-2. `UPDATE user_profiles SET updated_at = now() WHERE updated_at IS NULL` で backfill
-3. `ALTER COLUMN updated_at SET NOT NULL` で確定
-4. `user_id` FK を drop し、`ON DELETE CASCADE` 付きで再作成（PostgreSQL は `ondelete` のインプレース ALTER を持たないため）
-
-3 ステップ分割は既存行の存在下でも安全に適用するため。テスト環境では fresh container なので 1 ステップで等価だが、本番運用での無停止適用を優先して分割する。
+- `0003_user_profile_updated_at.py`: `updated_at` カラムの追加と `user_id` FK への `ON DELETE CASCADE` 適用。
+- `0004_user_profile_mobile_paypay_flags.py`: `is_rakuten_mobile` および `is_paypay_linked` カラムの追加。

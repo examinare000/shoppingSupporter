@@ -3,22 +3,36 @@
 EC サイトごとの複雑な還元ルールを抽象化し、正確な実質価格を算出するコアロジックの設計。
 
 ## 1. 概要
-`api/lib/pricing/` 配下に集約される純粋関数群。外部依存（DB や API）を持たず、入力データ（価格、送料、プロフィール、カード情報）からポイント数と内訳（breakdown）を算出する。
+`api/lib/pricing/engine.py` に集約される純粋関数群。外部依存（DB や API）を持たず、入力データ（価格、送料、プロフィール、カード情報）からポイント数と内訳（breakdown）を算出する。
 
 ## 2. コア・データ構造
 
-### 2.1. `PricingResult` (算出結果)
+### 2.1. `UserContext` (入力)
+ポイント算出に必要なユーザー属性をカプセル化したデータ構造。
 ```python
-@dataclass
+@dataclass(frozen=True)
+class UserContext:
+    rakuten_rank: RakutenRank
+    is_amazon_prime: bool
+    is_rakuten_mobile: bool
+    yahoo_premium: bool
+    is_paypay_linked: bool
+    card_base_rate: float
+    card_special_rewards: Dict[str, float]
+```
+
+### 2.2. `PricingResult` (算出結果)
+```python
+@dataclass(frozen=True)
 class PricingResult:
     total_points: int            # 円換算された総ポイント
     effective_price: int         # 実質価格 (price + shipping - total_points)
-    breakdown: list[RewardEntry] # 内訳
+    breakdown: List[RewardEntry] # 内訳
 ```
 
-### 2.2. `RewardEntry` (内訳項目)
+### 2.3. `RewardEntry` (内訳項目)
 ```python
-@dataclass
+@dataclass(frozen=True)
 class RewardEntry:
     label: str    # 表示名 (例: "楽天SPU", "Amazonポイント")
     rate: float   # 倍率 (例: 0.01)
@@ -29,55 +43,36 @@ class RewardEntry:
 ## 3. 算出アルゴリズム
 
 ### 3.1. 共通ルール
-1.  **端数処理**: ポイント算出時の端数は切り捨てとする（各サイトの挙動に準拠）。
+1.  **端数処理**: ポイント算出時の端数は `math.floor` で切り捨てとする（各サイトの挙動に準拠）。
 2.  **実質価格の下限**: `max(0, ...)` で処理し、負数にならないようにする。
-3.  **計算対象金額**: ポイント付与は原則として「商品価格（税抜）」に対して行われるが、API から取得できる価格が税込の場合は `round(price / 1.1)` 等で近似値を出すか、サイトごとの仕様（楽天は税込、Amazon は税抜など）に厳密に従う。初期実装では API の `currentPrice` をそのままベースとする。
+3.  **計算対象金額**: 初期実装では API の `currentPrice` をそのままベースとする。
 
 ### 3.2. サイト別ロジック（2025/2026 基準）
 
 #### **Amazon.co.jp**
-- **基本還元率**: 商品ごとに設定されたポイント（通常 1% 程度）。
+- **基本還元率**: 一律 1% と仮定。
 - **Amazon Mastercard 特典**:
-    - Amazon Prime 会員: **+2.0%**
-    - 一般会員: **+1.5%**
-- **Amazon Prime 特典**: 配送無料（`shipping_fee = 0`）の判定に使用。
+    - `card_special_rewards["amazon"]` が 1.5% かつ `is_amazon_prime` が true の場合、自動的に **2.0%** へ昇格させる。
+- **Amazon Prime 特典**: `is_amazon_prime` が true の場合、実質価格算出時の `shipping_fee` を強制的に **0** として扱う。
 
 #### **楽天市場 (SPU)**
-2025年4月以降の SPU 仕様（最大 18 倍）を参考。
-- **基本**: 1% (ストアポイント)
-- **楽天カード利用**:
-    - 通常/家族/ゴールドカード: **+2%**
-    - プレミアムカード: **+4%**
-- **楽天モバイル契約者**: **+4%** (UserProfile.rakuten_rank とは別にフラグ管理を検討、初期はランクに統合または固定値)
-- **楽天銀行 + 楽天カード**: **+1%**
-- **その他 (証券/トラベル/アプリ等)**: 合計で最大 +7.0% 程度まで変動するが、初期実装では `UserProfile` に基づく主要項目のみを合算する。
+- **ストアポイント**: 1% (固定)
+- **楽天カード利用特典 (SPU)**: `card_special_rewards["rakuten"]` の値をそのまま加算（2% または 4%）。
+- **楽天モバイル特典 (SPU)**: `is_rakuten_mobile` が true の場合、**+4%** 加算。
 
 #### **Yahoo! ショッピング (LYP プレミアム)**
-2025年2月以降の仕様（毎日最大 7%）を参考。
-- **ストアポイント**: 1%
-- **LINE 連携 + 指定支払 (PayPay)**: **+4%**
-    - 判定条件: `UserProfile.is_paypay_linked` が true であること。
-    - **支払手段の整理**: 実際の特典条件は「LINE連携かつPayPay決済」だが、本サービスでは `is_paypay_linked` フラグを「連携済みかつPayPay決済を主とする意思表示」として扱う。`default_card_id` に PayPay カードが設定されている場合もこの条件を満たすものと見なす。
-- **LYP プレミアム会員特典**: **+2%**
-- **備考**: 付与されるポイントは「PayPay ポイント（期間限定）」として扱う。
+- **ストアポイント**: 1% (固定)
+- **LYP プレミアム会員特典**: `yahoo_premium` が true の場合、**+2%** 加算。
+- **PayPay 支払特典**: `is_paypay_linked` が true の場合、**+4%** 加算。
 
 ## 4. クレジットカード連携
-`Card.special_rewards` フィールド（JSON）を活用する。
-```json
-{
-  "amazon": 2.0,
-  "rakuten": 2.0,
-  "yahoo": 1.0
-}
-```
-このマッピングに基づき、サイトごとの追加還元率を動的に加算する。
-- **楽天カード**: SPU の「楽天カード特典分」として計算。
-- **Amazon Mastercard**: プライム会員か否かで 1.5% / 2.0% を切り替える。
-- **PayPay カード (Yahoo)**: 指定支払特典として計算。
+`UserContext.card_special_rewards` を介して `Card` テーブルのデータを注入する。
+- 楽天カード系: SPU 加算分として扱う。
+- Amazon Mastercard: 会員状態によるレート変動（1.5% -> 2.0%）をエンジン内部で吸収する。
+- 非提携カード: `card_base_rate`（通常 1.0%）が全サイトの基本還元として適用される。
 
-## 5. テスト戦略
-- **テーブル駆動テスト**: 大量の組み合わせ（サイト × ランク × カード）を `pytest.mark.parametrize` で網羅する。
-- **回帰テスト**: フロントエンドの旧実装（`effectivePrice.ts`）と同じ入力で同じ結果が出ることを保証する。
+## 5. テスト
+`tests/unit/pricing/test_engine.py` にて、ゲスト/会員/特定カードの各組み合わせに対する期待値を検証済み。
 
 ## 6. 関連タスク
 - Phase 1 T-06: サイト別ポイント算出ロジックの純粋関数化

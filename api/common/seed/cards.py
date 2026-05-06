@@ -9,11 +9,11 @@ CLI usage (run against the configured `DATABASE_URL`):
 
     python -m api.common.seed.cards
 
-Idempotency: a non-empty `cards` table short-circuits the seed. We do not
-have a unique constraint on `cards.name`, so `ON CONFLICT` is not available
-without a schema change; the count==0 gate is the simplest safe alternative
-that also avoids a destructive re-seed (which would invalidate
-`UserProfile.default_card_id` FKs in T-05).
+Idempotency: matches cards by name. Existing rows are updated in-place
+(base_reward_rate / annual_fee / special_rewards); missing rows are inserted.
+This avoids duplicates and preserves `UserProfile.default_card_id` FKs
+across re-seeds, allowing reward-rate corrections without a destructive
+re-seed cycle.
 """
 
 from __future__ import annotations

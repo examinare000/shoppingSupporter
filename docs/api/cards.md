@@ -63,16 +63,17 @@ API レスポンスは camelCase（`baseRewardRate` / `annualFee` / `specialRewa
 
 ## 4. 初期投入カード
 
-`api/common/seed/cards.py` の `CARDS_SEED_DATA` で投入される 4 件。
+`api/common/seed/cards.py` の `CARDS_SEED_DATA` で投入される 5 件。
 
 | name | base_reward_rate | annual_fee | special_rewards | 設定根拠 |
 |---|---|---|---|---|
-| `楽天カード` | 1.0 | 0 | `{"rakuten": 1.0}` | 楽天市場利用時に SPU で +1% 加算される代表的な無料カード（T-06 で再校正） |
-| `Amazon Mastercard` | 1.0 | 0 | `{"amazon": 0.5}` | Amazon 利用時の Mastercard 一般会員加算（プライム会員は別途 T-08 で扱う） |
+| `楽天カード` | 1.0 | 0 | `{"rakuten": 2.0}` | 楽天市場利用時に SPU で加算される代表的な無料カード。校正済み |
+| `楽天プレミアムカード` | 1.0 | 11000 | `{"rakuten": 4.0}` | 楽天カードの上位。プライオリティパス特典等は対象外だが還元率は最高 |
+| `Amazon Mastercard` | 1.0 | 0 | `{"amazon": 1.5}` | Amazon 利用時の一般会員ベース。プライム加算は T-06 で合算 |
 | `Yahoo! JAPAN カード` | 1.0 | 0 | `{"yahoo": 1.0}` | PayPay カード前身。Yahoo! ショッピングで +1% の倍率加算 |
-| `一般 1% 還元カード` | 1.0 | 0 | `{}` | サイト別加算を持たないベースライン用ダミー（`UserProfile.default_card_id` 既定の選択肢として用意） |
+| `一般 1% 還元カード` | 1.0 | 0 | `{}` | サイト別加算を持たないベースライン用ダミー |
 
-> 各値は Phase 1 着手時点の代表値。T-06 のポイント計算実装で実値・適用条件を再校正する可能性がある。
+> 各値は 2026 年時点の代表値。T-06 のポイント計算実装に向けてシードデータを校正済み。実値・適用条件の最終確定は T-06 実装時に行う。
 
 ## 5. 投入手順
 
@@ -81,4 +82,4 @@ API レスポンスは camelCase（`baseRewardRate` / `annualFee` / `specialRewa
 python -m api.common.seed.cards
 ```
 
-冪等性: `cards` テーブルが既に 1 件以上含む場合は no-op。`UserProfile.default_card_id` の参照を破壊しないよう、再 seed では削除→再投入は行わない（T-05 で重要）。`name` ユニーク制約は持たない（スキーマ変更を伴うため Phase 1 のスコープ外）。
+冪等性: `name` をキーとして既存行を検索し、存在すればフィールドを更新（UPDATE）、存在しなければ新規挿入（INSERT）を行う。`UserProfile.default_card_id` の参照を破壊せずに最新の還元率を反映できる。

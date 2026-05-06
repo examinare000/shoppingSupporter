@@ -92,7 +92,7 @@ Vercel Cron Jobs が 1 時間ごとに叩く（`vercel.json` の `0 * * * *`）�
 ### 2.5. Card マスタ
 `GET /api/cards` / `GET /api/cards/{id}`
 
-実装: `api/routers/cards.py`。仕様の正本は `docs/api/cards.md`（`special_rewards` の構造、初期 4 件のシード内容、投入手順を集約）。
+実装: `api/routers/cards.py`。仕様の正本は `docs/api/cards.md`（`special_rewards` の構造、初期 5 件のシード内容、投入手順を集約）。
 
 公開エンドポイント（認証不要）。書き込み系（POST/PUT/DELETE）は Phase 1 では実装せず、行の投入は `python -m api.common.seed.cards` で行う。
 
@@ -127,7 +127,7 @@ ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` �
 
 **Response 概要:**
 
-- レスポンスは camelCase（`rakutenRank` / `isAmazonPrime` / `yahooPremium` / `defaultCardId` / `defaultCard` / `updatedAt`）
+- レスポンスは camelCase（`rakutenRank` / `isAmazonPrime` / `isRakutenMobile` / `yahooPremium` / `isPayPayLinked` / `defaultCardId` / `defaultCard` / `updatedAt`）
 - `defaultCard` は `CardResponse` 形を nested 同梱
 - リクエストボディは `extra="forbid"`。GET レスポンス形（`updatedAt` / `defaultCard`）や `accessToken` 等の envelope 流用は 422
 - バリデーション順序は (1) Pydantic（型・Enum・`extra="forbid"` / bool `strict=True`）→ (2) 認証 401 →(3) `card_exists` 422。順序を固定するためハンドラは `Depends(get_current_user)` を使わず `Header` 経由で受けて body 検証通過後に呼ぶ

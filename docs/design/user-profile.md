@@ -13,7 +13,9 @@
 | `user_id` | UUID | PK, FK(users.id) ON DELETE CASCADE | ユーザー ID |
 | `rakuten_rank` | Enum | NOT NULL | 楽天ランク (`regular`, `silver`, `gold`, `platinum`, `diamond`) |
 | `is_amazon_prime` | boolean | NOT NULL (false) | Amazon Prime 加入有無 |
+| `is_rakuten_mobile` | boolean | NOT NULL (false) | 楽天モバイル契約有無（SPU 判定用） |
 | `yahoo_premium` | boolean | NOT NULL (false) | Yahoo! プレミアム (LYP) 加入有無 |
+| `is_paypay_linked` | boolean | NOT NULL (false) | PayPay / LINE 連携有無（Yahoo! 特典判定用） |
 | `default_card_id` | integer | FK(cards.id), NULL 許容 | 既定のクレジットカード |
 | `updated_at` | datetime | NOT NULL | 更新日時 (Phase 1 で追加) |
 
@@ -61,7 +63,9 @@ class UserProfileUpdate(BaseModel):
 
     rakuten_rank: RakutenRank
     is_amazon_prime: bool
+    is_rakuten_mobile: bool
     yahoo_premium: bool
+    is_paypay_linked: bool
     default_card_id: Optional[int]
 
 class UserProfileResponse(BaseModel):
@@ -71,7 +75,9 @@ class UserProfileResponse(BaseModel):
 
     rakuten_rank: RakutenRank = Field(serialization_alias="rakutenRank")
     is_amazon_prime: bool = Field(serialization_alias="isAmazonPrime")
+    is_rakuten_mobile: bool = Field(serialization_alias="isRakutenMobile")
     yahoo_premium: bool = Field(serialization_alias="yahooPremium")
+    is_paypay_linked: bool = Field(serialization_alias="isPayPayLinked")
     default_card_id: Optional[int] = Field(serialization_alias="defaultCardId")
     # 検索パーソナライズ統合 (T-08) と方針を揃え、joined load で取得した
     # Card 情報を nested で返却する。フロント設定画面が ID から名前を引く
