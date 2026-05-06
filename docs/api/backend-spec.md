@@ -137,7 +137,7 @@ ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` �
 
 詳細は `docs/plans/phase1-foundation.md` を参照。
 
-- 検索結果へのユーザー個別実質価格の同梱（T-08）
+- OpenAPI → TypeScript 型生成パイプライン（T-09）
 
 ## 4. 共通エラーレスポンス
 
