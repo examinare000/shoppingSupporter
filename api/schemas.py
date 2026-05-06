@@ -24,6 +24,49 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from .common.models import RakutenRank
 
 
+class BreakdownEntry(BaseModel):
+    """PricingEngine の内訳 1 件。camelCase 変換不要（すべて lowercase）。
+
+    Why RewardEntry をそのまま使わないか:
+        engine.py の RewardEntry は dataclass であり ORM に非依存の純粋関数層。
+        HTTP レスポンス向けシリアライズの責務はスキーマ層に持たせるため、
+        Pydantic BaseModel として別定義する。
+    """
+    label: str
+    rate: float
+    points: int
+    note: str
+
+
+class ListingOut(BaseModel):
+    """検索結果 1 件に含まれる EC サイトリスト情報。
+
+    Why from_attributes=False（デフォルト）:
+        router 側で EcSiteProduct ORM から明示的に構築するため、
+        ORM 属性マッピングは不要。
+    """
+    site_type: str = Field(serialization_alias="siteType")
+    site_product_id: str = Field(serialization_alias="siteProductId")
+    url: str
+    # 未認証・プロフィール未設定の場合は null を返す（T-08 仕様）
+    points: Optional[int]
+    effective_price: Optional[int] = Field(serialization_alias="effectivePrice")
+    breakdown: Optional[List[BreakdownEntry]]
+
+
+class PersonalizationMeta(BaseModel):
+    """パーソナライズ適用状態のメタ情報。"""
+    applied: bool
+    # 未認証時は null
+    rakuten_rank: Optional[str] = Field(serialization_alias="rakutenRank")
+    has_card: bool = Field(serialization_alias="hasCard")
+
+
+class SearchMeta(BaseModel):
+    """検索レスポンスのメタフィールド。認証有無に関わらず常に返す。"""
+    personalization: PersonalizationMeta
+
+
 class ProductSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,15 +77,16 @@ class ProductSummary(BaseModel):
     tags: List[str]
     in_stock: bool = Field(serialization_alias="inStock")
     current_price: Optional[int] = Field(serialization_alias="currentPrice")
+    listings: List[ListingOut] = Field(default_factory=list)
 
 
 class ProductSearchEnvelope(BaseModel):
-    # Items are typed as `ProductSummary`; FastAPI converts each ORM row via
-    # `from_attributes=True` when the handler returns SQLAlchemy instances.
     items: List[ProductSummary]
     page: int
     total_pages: int = Field(serialization_alias="totalPages")
     total_count: int = Field(serialization_alias="totalCount")
+    # meta は認証有無に関わらず常にレスポンスに含まれる（T-08 テスト契約）
+    meta: SearchMeta
 
 
 # パスワードの最小長は agent-rules/12-security-guidelines.md「最小 8 文字以上」
@@ -84,9 +128,7 @@ class UserResponse(BaseModel):
 
 
 class CardResponse(BaseModel):
-    # `from_attributes=True` lets the cards router return SQLAlchemy `Card`
-    # rows directly; FastAPI serializes them through this schema with the
-    # camelCase aliases below.
+    # `from_attributes=True` lets the cards router return SQLAlchemy `Card` rows directly.
     model_config = ConfigDict(from_attributes=True)
 
     id: int
