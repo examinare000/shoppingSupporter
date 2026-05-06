@@ -116,8 +116,9 @@ Phase 1 は **last-write-wins**。楽観ロックは持たない。`updated_at` 
 ## 5. テストレイヤー
 
 | ファイル | 件数 | 観点 |
-|---|---|---|
-| `tests/integration/test_profile.py` | 46 | GET/PUT の HTTP 契約 / 401 共通化 / camelCase / `extra="forbid"` / Pydantic→401→422 順序 / nested CardResponse / 5 ランクの round trip / `users.id` 削除での CASCADE / リポジトリ単体（`joinedload` / `card_exists` / `upsert_profile`） |
+最終更新: 2026-05-06（T-05 実装反映）
+...
+| `tests/integration/test_profile.py` | 49 | GET/PUT の HTTP 契約 / 401 共通化 / camelCase / `extra="forbid"` / Pydantic→401→422 順序 / nested CardResponse / 5 ランクの round trip / `users.id` 削除での CASCADE / リポジトリ単体（`joinedload` / `card_exists` / `upsert_profile`） |
 
 リポジトリの単体テストも Postgres 固有挙動（`joinedload`、FK CASCADE）を観測する必要があるため `tests/integration/` に同居する（`test_product_search.py` と同じ判断）。
 

@@ -1,6 +1,6 @@
 # バックエンド API 仕様
 
-最終更新: 2026-05-05（T-05 UserProfile API 実装反映）
+最終更新: 2026-05-06（T-05 UserProfile API 実装反映）
 
 実装は `api/main.py`（FastAPI）配下。ルートは `vercel.json` のリライトで `/api/(.*) → /api/main.py` に集約され、FastAPI 内部でパスマッチする。
 
