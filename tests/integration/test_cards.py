@@ -42,11 +42,14 @@ EXPECTED_CARD_KEYS = {
 }
 
 
-# Fixed names per docs/plans/phase1-foundation.md T-04. The seed script must
-# use these exact strings; tests compare by exact equality on purpose so a
-# silent rename in the seed list is caught here.
+# Fixed names per docs/plans/phase1-foundation.md T-04 と
+# docs/plans/user-profile-enhancement.md §2.2 によるシード校正。
+# 楽天プレミアムカードは楽天カードの直後に挿入する（ファミリー隣接）。
+# tests/integration/test_cards.py は `CARDS_SEED_DATA` の name 列を
+# このリストと厳密一致で比較するため、seed 側のリネームは即検出される。
 EXPECTED_SEED_NAMES = [
     "楽天カード",
+    "楽天プレミアムカード",
     "Amazon Mastercard",
     "Yahoo! JAPAN カード",
     "一般 1% 還元カード",
@@ -280,16 +283,17 @@ class TestEndpointPublic:
 
 
 class TestSeedCards:
-    def test_should_insert_exactly_four_rows_into_empty_table(self, db_session):
+    def test_should_insert_exactly_five_rows_into_empty_table(self, db_session):
         # Given: empty cards table
         assert db_session.query(Card).count() == 0
 
         # When: running the seed
         seed_cards(db_session)
 
-        # Then: 4 rows are present (matches the T-04 acceptance criterion
-        # "シード後に GET /api/cards が 4 件返す")
-        assert db_session.query(Card).count() == 4
+        # Then: 5 rows are present。docs/plans/user-profile-enhancement.md §2.2
+        # により楽天プレミアムカードを追加した。T-04 の元基準（4 件）は
+        # この校正で 5 件に置き換わるため、テスト名・件数を本値に更新する。
+        assert db_session.query(Card).count() == 5
 
     def test_should_insert_the_documented_card_names_verbatim(self, db_session):
         # When: running the seed against an empty table
@@ -302,10 +306,27 @@ class TestSeedCards:
     def test_seed_data_constant_should_match_documented_names(self):
         # Given: the module-level CARDS_SEED_DATA constant (the source of
         # truth that the seed function iterates over)
-        # Then: the four spec names appear in spec order. Asserting on the
+        # Then: the spec names appear in spec order. Asserting on the
         # constant — not just the post-insert rows — makes a rename in
         # CARDS_SEED_DATA fail this test even before a DB round trip.
         assert [row["name"] for row in CARDS_SEED_DATA] == EXPECTED_SEED_NAMES
+
+    def test_seed_data_constant_should_match_documented_special_rewards(self):
+        # Why: 2025/2026 年 SPU / Amazon Mastercard 仕様の最新還元率を
+        # 契約として固定する（docs/plans/user-profile-enhancement.md §2.2）。
+        # 還元率は T-06 ポイント算出ロジックの入力値そのものなので、
+        # シード段階での値ズレを seed 直値で検出できるようにする。
+        # 値は CARDS_SEED_DATA を直接 dict 検査する（DB 経路を経由しなくても
+        # 契約違反が観測できるよう、定数に対して直接 assert する）。
+        by_name = {row["name"]: row for row in CARDS_SEED_DATA}
+        assert by_name["楽天カード"]["special_rewards"] == {"rakuten": 2.0}
+        assert by_name["楽天プレミアムカード"]["special_rewards"] == {"rakuten": 4.0}
+        assert by_name["楽天プレミアムカード"]["base_reward_rate"] == 1.0
+        assert by_name["楽天プレミアムカード"]["annual_fee"] == 11000
+        assert by_name["Amazon Mastercard"]["special_rewards"] == {"amazon": 1.5}
+        # 据え置き対象（誤って編集されていないか確認）
+        assert by_name["Yahoo! JAPAN カード"]["special_rewards"] == {"yahoo": 1.0}
+        assert by_name["一般 1% 還元カード"]["special_rewards"] == {}
 
     def test_special_rewards_keys_should_be_valid_site_types_or_empty(
         self, db_session

@@ -49,10 +49,14 @@ LOGIN_ENDPOINT = "/api/auth/login"
 
 # レスポンスボディの camelCase 形は 1 箇所で正本化する。各キー個別の
 # assert ではなく集合一致で見ることで、欠落・余分の双方を 1 テストで検出する。
+# `isRakutenMobile` / `isPayPayLinked` は docs/plans/user-profile-enhancement.md
+# §2.1 で追加したフィールド（楽天 SPU / Yahoo! ショッピング LINE 連携の判定用）。
 EXPECTED_PROFILE_KEYS = {
     "rakutenRank",
     "isAmazonPrime",
     "yahooPremium",
+    "isRakutenMobile",
+    "isPayPayLinked",
     "defaultCardId",
     "defaultCard",
     "updatedAt",
@@ -95,6 +99,8 @@ def _make_payload(
     rakuten_rank: str = "regular",
     is_amazon_prime: bool = False,
     yahoo_premium: bool = False,
+    is_rakuten_mobile: bool = False,
+    is_paypay_linked: bool = False,
     default_card_id=None,
 ) -> dict:
     """PUT /api/me/profile の正規 body を camelCase で構築するファクトリ。
@@ -102,11 +108,18 @@ def _make_payload(
     全フィールド必須の全置換セマンティクス（user-profile.md §3.2）を
     1 箇所で表現する。テスト側のキー名を間違えるとリクエスト contract が
     検証できないため、camelCase（`rakutenRank` 等）で固定する。
+
+    `is_rakuten_mobile` / `is_paypay_linked` は
+    docs/plans/user-profile-enhancement.md §2.1 で追加した必須フィールド。
+    既存テストはデフォルト False で互換、新フィールドの値を主張する場合のみ
+    引数で上書きする。
     """
     return {
         "rakutenRank": rakuten_rank,
         "isAmazonPrime": is_amazon_prime,
         "yahooPremium": yahoo_premium,
+        "isRakutenMobile": is_rakuten_mobile,
+        "isPayPayLinked": is_paypay_linked,
         "defaultCardId": default_card_id,
     }
 
@@ -165,6 +178,10 @@ class TestGetProfile:
         assert body["rakutenRank"] == "regular"
         assert body["isAmazonPrime"] is False
         assert body["yahooPremium"] is False
+        # 新フィールド（user-profile-enhancement §2.1）。デフォルトは false で、
+        # 既存ユーザーが未保存のままアクセスしても破壊的変化が起きないこと。
+        assert body["isRakutenMobile"] is False
+        assert body["isPayPayLinked"] is False
         assert body["defaultCardId"] is None
         assert body["defaultCard"] is None
         assert body["updatedAt"] is None
@@ -209,6 +226,8 @@ class TestGetProfile:
                 rakuten_rank=RakutenRank.GOLD,
                 is_amazon_prime=True,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=seeded_card.id,
             )
         )
@@ -242,6 +261,8 @@ class TestGetProfile:
                 rakuten_rank=RakutenRank.SILVER,
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=None,
             )
         )
@@ -271,6 +292,8 @@ class TestGetProfile:
                 rakuten_rank=RakutenRank.REGULAR,
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=None,
             )
         )
@@ -333,6 +356,8 @@ class TestPutProfile:
                 rakuten_rank="gold",
                 is_amazon_prime=True,
                 yahoo_premium=True,
+                is_rakuten_mobile=True,
+                is_paypay_linked=True,
                 default_card_id=seeded_card.id,
             ),
         )
@@ -343,6 +368,8 @@ class TestPutProfile:
         assert body["rakutenRank"] == "gold"
         assert body["isAmazonPrime"] is True
         assert body["yahooPremium"] is True
+        assert body["isRakutenMobile"] is True
+        assert body["isPayPayLinked"] is True
         assert body["defaultCardId"] == seeded_card.id
 
         persisted = (
@@ -353,6 +380,8 @@ class TestPutProfile:
         assert persisted.rakuten_rank == RakutenRank.GOLD
         assert persisted.is_amazon_prime is True
         assert persisted.yahoo_premium is True
+        assert persisted.is_rakuten_mobile is True
+        assert persisted.is_paypay_linked is True
         assert persisted.default_card_id == seeded_card.id
 
     def test_should_expose_exactly_camelcase_keys(
@@ -380,6 +409,8 @@ class TestPutProfile:
                 rakuten_rank="regular",
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=seeded_card.id,
             ),
         )
@@ -393,6 +424,8 @@ class TestPutProfile:
                 rakuten_rank="diamond",
                 is_amazon_prime=True,
                 yahoo_premium=True,
+                is_rakuten_mobile=True,
+                is_paypay_linked=True,
                 default_card_id=None,
             ),
         )
@@ -403,6 +436,8 @@ class TestPutProfile:
         assert body["rakutenRank"] == "diamond"
         assert body["isAmazonPrime"] is True
         assert body["yahooPremium"] is True
+        assert body["isRakutenMobile"] is True
+        assert body["isPayPayLinked"] is True
         assert body["defaultCardId"] is None
         assert body["defaultCard"] is None
 
@@ -414,6 +449,8 @@ class TestPutProfile:
         )
         assert len(rows) == 1
         assert rows[0].rakuten_rank == RakutenRank.DIAMOND
+        assert rows[0].is_rakuten_mobile is True
+        assert rows[0].is_paypay_linked is True
         assert rows[0].default_card_id is None
 
     def test_should_accept_default_card_id_null_to_clear_card(
@@ -538,6 +575,33 @@ class TestPutProfileValidation:
         )
         assert response.status_code == 422
 
+    def test_should_return_422_when_is_rakuten_mobile_field_missing(
+        self, client, auth_token
+    ):
+        # Why: PUT は全置換セマンティクスなので、追加フィールドであっても
+        # 省略は受理せず 422 を返す（user-profile.md §3.2 / §3.3）。
+        body = _make_payload()
+        del body["isRakutenMobile"]
+        response = client.put(
+            PROFILE_ENDPOINT,
+            headers=_auth_header(auth_token["token"]),
+            json=body,
+        )
+        assert response.status_code == 422
+
+    def test_should_return_422_when_is_paypay_linked_field_missing(
+        self, client, auth_token
+    ):
+        # Why: 同上。`isPayPayLinked` の省略も 422。
+        body = _make_payload()
+        del body["isPayPayLinked"]
+        response = client.put(
+            PROFILE_ENDPOINT,
+            headers=_auth_header(auth_token["token"]),
+            json=body,
+        )
+        assert response.status_code == 422
+
     def test_should_return_422_when_default_card_id_field_missing(
         self, client, auth_token
     ):
@@ -595,6 +659,21 @@ class TestPutProfileValidation:
         # Why: 型違反は Pydantic レベルで 422。"yes" 等の文字列を受理しない。
         body = _make_payload()
         body["isAmazonPrime"] = "yes"
+        response = client.put(
+            PROFILE_ENDPOINT,
+            headers=_auth_header(auth_token["token"]),
+            json=body,
+        )
+        assert response.status_code == 422
+
+    def test_should_return_422_when_is_rakuten_mobile_is_not_boolean(
+        self, client, auth_token
+    ):
+        # Why: `is_amazon_prime` と同パターン（strict=True）。Pydantic v2 既定の
+        # ゆるい bool 強制（"yes"/"true"/1）を 422 で弾く契約を新フィールドにも
+        # 同じく適用する（user-profile.md §3.3）。
+        body = _make_payload()
+        body["isRakutenMobile"] = "yes"
         response = client.put(
             PROFILE_ENDPOINT,
             headers=_auth_header(auth_token["token"]),
@@ -715,6 +794,8 @@ class TestRoundTrip:
                 rakuten_rank="platinum",
                 is_amazon_prime=True,
                 yahoo_premium=True,
+                is_rakuten_mobile=True,
+                is_paypay_linked=True,
                 default_card_id=seeded_card.id,
             ),
         )
@@ -731,6 +812,14 @@ class TestRoundTrip:
         assert get_response.json()["rakutenRank"] == put_response.json()["rakutenRank"]
         assert get_response.json()["isAmazonPrime"] == put_response.json()["isAmazonPrime"]
         assert get_response.json()["yahooPremium"] == put_response.json()["yahooPremium"]
+        assert (
+            get_response.json()["isRakutenMobile"]
+            == put_response.json()["isRakutenMobile"]
+        )
+        assert (
+            get_response.json()["isPayPayLinked"]
+            == put_response.json()["isPayPayLinked"]
+        )
         assert get_response.json()["defaultCardId"] == put_response.json()["defaultCardId"]
         # nested defaultCard の id も一致する（GET 経路でも joinedload 済）
         assert get_response.json()["defaultCard"]["id"] == seeded_card.id
@@ -795,6 +884,8 @@ class TestRequestBodyContract:
             "rakutenRank": "regular",
             "isAmazonPrime": False,
             "yahooPremium": False,
+            "isRakutenMobile": False,
+            "isPayPayLinked": False,
             "defaultCardId": None,
             "defaultCard": None,
             "updatedAt": None,
@@ -826,13 +917,15 @@ class TestCascadeDelete:
     def test_user_delete_should_cascade_to_user_profile(
         self, db_session, auth_token
     ):
-        # Given: profile を保存
+        # Given: profile を保存（新フィールドは契約上 NOT NULL なので明示）
         db_session.add(
             UserProfile(
                 user_id=auth_token["user_id"],
                 rakuten_rank=RakutenRank.REGULAR,
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=None,
             )
         )
@@ -897,6 +990,8 @@ class TestRepositoryGetProfileByUserId:
                 rakuten_rank=RakutenRank.SILVER,
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=None,
             )
         )
@@ -928,6 +1023,8 @@ class TestRepositoryGetProfileByUserId:
                 rakuten_rank=RakutenRank.GOLD,
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=card.id,
             )
         )
@@ -967,13 +1064,15 @@ class TestRepositoryUpsertProfile:
         # Given: profile 行が無いユーザー
         user = _create_user(db_session)
 
-        # When: upsert
+        # When: upsert（新フィールドも True で書き込む）
         result = upsert_profile(
             db_session,
             user_id=user.id,
             rakuten_rank=RakutenRank.GOLD,
             is_amazon_prime=True,
             yahoo_premium=False,
+            is_rakuten_mobile=True,
+            is_paypay_linked=True,
             default_card_id=None,
         )
 
@@ -982,6 +1081,8 @@ class TestRepositoryUpsertProfile:
         assert result.rakuten_rank == RakutenRank.GOLD
         assert result.is_amazon_prime is True
         assert result.yahoo_premium is False
+        assert result.is_rakuten_mobile is True
+        assert result.is_paypay_linked is True
         assert result.default_card_id is None
 
         rows = db_session.query(UserProfile).filter_by(user_id=user.id).all()
@@ -996,6 +1097,8 @@ class TestRepositoryUpsertProfile:
                 rakuten_rank=RakutenRank.REGULAR,
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=None,
             )
         )
@@ -1008,6 +1111,8 @@ class TestRepositoryUpsertProfile:
             rakuten_rank=RakutenRank.DIAMOND,
             is_amazon_prime=True,
             yahoo_premium=True,
+            is_rakuten_mobile=True,
+            is_paypay_linked=True,
             default_card_id=None,
         )
 
@@ -1017,6 +1122,8 @@ class TestRepositoryUpsertProfile:
         assert result.rakuten_rank == RakutenRank.DIAMOND
         assert result.is_amazon_prime is True
         assert result.yahoo_premium is True
+        assert result.is_rakuten_mobile is True
+        assert result.is_paypay_linked is True
 
     def test_should_set_default_card_id_when_card_specified(
         self, db_session, make_card
@@ -1035,6 +1142,8 @@ class TestRepositoryUpsertProfile:
             rakuten_rank=RakutenRank.REGULAR,
             is_amazon_prime=False,
             yahoo_premium=False,
+            is_rakuten_mobile=False,
+            is_paypay_linked=False,
             default_card_id=card.id,
         )
 
@@ -1057,6 +1166,8 @@ class TestRepositoryUpsertProfile:
                 rakuten_rank=RakutenRank.GOLD,
                 is_amazon_prime=False,
                 yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
                 default_card_id=card.id,
             )
         )
@@ -1069,6 +1180,8 @@ class TestRepositoryUpsertProfile:
             rakuten_rank=RakutenRank.GOLD,
             is_amazon_prime=False,
             yahoo_premium=False,
+            is_rakuten_mobile=False,
+            is_paypay_linked=False,
             default_card_id=None,
         )
 
