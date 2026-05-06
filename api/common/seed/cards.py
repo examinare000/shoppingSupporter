@@ -1,8 +1,9 @@
 """Initial Card seed.
 
-Inserts the four launch cards documented in `docs/plans/phase1-foundation.md`
-T-04 and `docs/api/cards.md`. Names are spec strings and must not be
-abbreviated, translated, or punctuation-normalized.
+Inserts the launch cards documented in `docs/plans/phase1-foundation.md`
+T-04, `docs/api/cards.md`, and the rate calibration tracked in
+`docs/plans/user-profile-enhancement.md` §2.2. Names are spec strings and
+must not be abbreviated, translated, or punctuation-normalized.
 
 CLI usage (run against the configured `DATABASE_URL`):
 
@@ -23,23 +24,35 @@ from sqlalchemy.orm import Session
 
 from ..models import Card
 
-# Source of truth for the four launch cards. Keys are intentionally
-# snake_case to match the SQLAlchemy column names so `Card(**row)` works
-# directly. Values for `special_rewards` use `SiteType` value strings;
-# semantics (additive bonus rate in %) are spelled out in
-# `docs/api/cards.md`.
+# Source of truth for the launch cards. Keys are intentionally snake_case to
+# match the SQLAlchemy column names so `Card(**row)` works directly. Values
+# for `special_rewards` use `SiteType` value strings; semantics (additive
+# bonus rate in %) are spelled out in `docs/api/cards.md`.
+#
+# Rate calibration (docs/plans/user-profile-enhancement.md §2.2, 2025/2026):
+#   - 楽天カード: rakuten +2.0%（カード保有 SPU の最新値）
+#   - 楽天プレミアムカード: rakuten +4.0%（プレミアム加算分。年会費 11000 円）
+#   - Amazon Mastercard: amazon +1.5%（一般会員ベース。プライム加算は
+#     T-06 の算出ロジックで `is_amazon_prime` を参照して合算する）
+# 楽天プレミアムカードは楽天カードの直後に配置し、ファミリーを隣接させる。
 CARDS_SEED_DATA: List[Dict] = [
     {
         "name": "楽天カード",
         "base_reward_rate": 1.0,
         "annual_fee": 0,
-        "special_rewards": {"rakuten": 1.0},
+        "special_rewards": {"rakuten": 2.0},
+    },
+    {
+        "name": "楽天プレミアムカード",
+        "base_reward_rate": 1.0,
+        "annual_fee": 11000,
+        "special_rewards": {"rakuten": 4.0},
     },
     {
         "name": "Amazon Mastercard",
         "base_reward_rate": 1.0,
         "annual_fee": 0,
-        "special_rewards": {"amazon": 0.5},
+        "special_rewards": {"amazon": 1.5},
     },
     {
         "name": "Yahoo! JAPAN カード",
@@ -57,16 +70,21 @@ CARDS_SEED_DATA: List[Dict] = [
 
 
 def seed_cards(db: Session) -> None:
-    """Insert the four spec cards if the table is empty.
+    """Insert or update the spec cards.
 
-    Returns silently when the table already has any row. This is the
-    documented contract — it is what makes the function safe to re-run
-    in deploy pipelines and test environments.
+    Idempotency: Matches cards by name. This allows updating reward rates in
+    the seed data without creating duplicates or breaking existing FKs
+    that reference these cards.
     """
-    if db.query(Card).count() > 0:
-        return
     for row in CARDS_SEED_DATA:
-        db.add(Card(**row))
+        existing = db.query(Card).filter(Card.name == row["name"]).one_or_none()
+        if existing:
+            # Update existing row fields
+            existing.base_reward_rate = row["base_reward_rate"]
+            existing.annual_fee = row["annual_fee"]
+            existing.special_rewards = row["special_rewards"]
+        else:
+            db.add(Card(**row))
     db.commit()
 
 
