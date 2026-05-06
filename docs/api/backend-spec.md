@@ -133,11 +133,9 @@ ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` �
 - バリデーション順序は (1) Pydantic（型・Enum・`extra="forbid"` / bool `strict=True`）→ (2) 認証 401 →(3) `card_exists` 422。順序を固定するためハンドラは `Depends(get_current_user)` を使わず `Header` 経由で受けて body 検証通過後に呼ぶ
 - `defaultCardId` が存在しないカードを参照した場合は 422（FK IntegrityError 経由ではなく事前 SELECT）
 
-## 3. Phase 1 残件
+## 3. Phase 1 完了
 
-Phase 1 の全タスク（T-01〜T-09）は実装済み。残件は CI 自動化のみ。
-
-- `.github/workflows/` への `npm run check:api-types` 統合（型ドリフト検知の CI 自動化）
+Phase 1 の全タスク（T-01〜T-09）は実装済み。
 
 ## 4. 共通エラーレスポンス
 
@@ -151,4 +149,4 @@ Phase 1 の全タスク（T-01〜T-09）は実装済み。残件は CI 自動化
 
 ## 5. 型同期（Phase 1 完了後）
 
-T-09 にて実装済み。`api/main.py` の FastAPI が公開する `/openapi.json` から `openapi-typescript` で `frontend/types/api.ts` を自動生成している。型同期の手順は `docs/tech/api-type-sync.md` を参照。CI への自動統合（`.github/workflows/`）は残件。
+T-09 にて実装済み。`api/main.py` の FastAPI が公開する `/openapi.json` から `openapi-typescript` で `frontend/types/api.ts` を自動生成している。型同期の手順は `docs/tech/api-type-sync.md` を参照。PR 時の自動ドリフト検知は `.github/workflows/check-api-types.yml` で実装済み。

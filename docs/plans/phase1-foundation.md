@@ -187,7 +187,7 @@
 - `searchClient.ts` を `ProductSearchEnvelope`（`{items, page, totalPages, totalCount, meta}`）形式に修正し、envelope 直返しに対応
 - `docs/tech/api-type-sync.md` を新設し、型同期フローとコマンドリファレンスを文書化
 
-**残件**: `.github/workflows/` への `check:api-types` 統合（CI 自動化）。現状は開発者の手元実行で運用。
+**CI**: `.github/workflows/check-api-types.yml` にて PR 時に自動ドリフト検知を実装済み。`scripts/export_openapi.py` で DB・サーバー起動なしにスキーマを書き出し、`openapi-typescript` で再生成して差分チェックを行う。
 
 ---
 
