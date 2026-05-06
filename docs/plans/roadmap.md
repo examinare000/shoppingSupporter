@@ -22,7 +22,7 @@
 - [x] T-04: Card マスタ API と初期シード（最新還元率に校正済み）
 - [x] T-05: UserProfile API（モバイル・PayPay 連携フラグ拡張済み）
 - [x] T-07: DB 主導の商品検索 API（FTS + pg_trgm）
-- [ ] T-06: サイト別ポイント算出ロジックの純粋関数化（api/lib/pricing/engine.py）
+- [x] T-06: サイト別ポイント算出ロジックの純粋関数化（api/lib/pricing/engine.py）
 - [ ] T-08: 検索 API への UserProfile / Card 統合
 - [ ] T-09: OpenAPI → TypeScript 型生成パイプライン
 
