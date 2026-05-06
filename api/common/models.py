@@ -69,8 +69,16 @@ class UserProfile(Base):
     )
     default_card_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cards.id"))
     rakuten_rank: Mapped[RakutenRank] = mapped_column(Enum(RakutenRank), default=RakutenRank.REGULAR)
+    
+    # Why is_rakuten_mobile / is_paypay_linked: docs/plans/user-profile-enhancement.md
+    # §2.1 で追加した SPU / Yahoo! ショッピング指定支払特典の判定フラグ。T-06
+    # ポイント算出ロジックが直接参照するため、ドメイン上の必須項目として
+    # NOT NULL で持つ（既存ユーザーは 0004 マイグレーションで false に backfill）。
     is_amazon_prime: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_rakuten_mobile: Mapped[bool] = mapped_column(Boolean, default=False)
     yahoo_premium: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_paypay_linked: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Why onupdate: user-profile.md §2.1「`onupdate=datetime.utcnow` で自動更新」。
     # Phase 2 で `If-Unmodified-Since` 楽観ロックの種にする伏線（同 §3.2）。
     updated_at: Mapped[datetime] = mapped_column(
