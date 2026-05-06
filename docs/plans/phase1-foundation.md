@@ -1,6 +1,6 @@
 # Phase 1 実装計画: 基盤整備と UserProfile 連携
 
-最終更新日: 2026-05-20（T-07 完了反映）
+最終更新日: 2026-05-06（T-05, T-06 完了反映）
 
 ## 位置づけ
 
@@ -40,8 +40,8 @@
 | T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了 | なし | ○ |
 | T-03 | JWT 最小認証の実装 | ✅ 完了 | T-01, T-02 | × |
 | T-04 | `Card` マスタ API と初期シード | ✅ 完了 | T-01, T-02 | T-05 と並列可 |
-| T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手 | T-03 | T-04 と並列可 |
-| T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ⏳ 未着手 | T-02 | T-04, T-05 と並列可 |
+| T-05 | `UserProfile` API（参照・更新） | ✅ 完了 | T-03 | T-04 と並列可 |
+| T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ✅ 完了 | T-02 | T-04, T-05 と並列可 |
 | T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了 | T-01, T-02 | T-06 と並列可 |
 | T-08 | 検索 API への UserProfile / Card 統合 | ⏳ 未着手 | T-05, T-06, T-07 | × |
 | T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | ⏳ 未着手 | T-04〜T-08 のうち API 形が確定したもの | × |
@@ -68,13 +68,13 @@
 **なぜ**: 現状バックエンドにテストが存在せず、TDD（`agent-rules/11-testing-strategy.md`）を成立させられない。Phase 1 の検算系ロジックは TDD で進める前提のため、最初に枠を作る。
 
 **実装結果**:
-- `pytest`, `pytest-asyncio`, `httpx`, `testcontainers` を `requirements-dev.txt` に追加。
-- `tests/unit/` — 外部 API クライアント（Amazon PA-API 署名 / レスポンス処理）の単体テスト 48 件。
-- `tests/integration/` — `update_prices` × `AmazonAPI` の結合 5 件と、`/api/products/search` 全 52 件（リポジトリ unit + エンドポイント integration）。
-- `tests/integration/conftest.py` で testcontainers Postgres + Alembic 適用 + `app.dependency_overrides[get_db]` を提供。
-- 当初予定していた SQLite in-memory 戦略は破棄（T-07 で FTS / pg_trgm / ARRAY を使うため Postgres 互換が必須になった）。
+- `pytest`, `pytest-asyncio`, `httpx`, `testcontainers` を `requirements-dev.txt` に追加.
+- `tests/unit/` — 外部 API クライアント（Amazon PA-API 署名 / レスポンス処理）の単体テスト 48 件.
+- `tests/integration/` — `update_prices` × `AmazonAPI` の結合 5 件と、`/api/products/search` 全 52 件（リポジトリ unit + エンドポイント integration）.
+- `tests/integration/conftest.py` で testcontainers Postgres + Alembic 適用 + `app.dependency_overrides[get_db]` を提供.
+- 当初予定していた SQLite in-memory 戦略は破棄（T-07 で FTS / pg_trgm / ARRAY を使うため Postgres 互換が必須になった）.
 
-**完了条件**: 全 105 件の `pytest -q` が緑（integration は Docker 必須）。
+**完了条件**: 全 105 件の `pytest -q` が緑（integration は Docker 必須）.
 
 ---
 
@@ -84,7 +84,7 @@
 
 **実装結果**:
 - `api/routers/auth.py` を新設し `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me` を実装。`api/main.py` で include。
-- `api/common/security.py` に bcrypt（`hash_password` / `verify_password`）と JWT（HS256 / 60 分有効期限の `create_access_token` / `decode_access_token`）、および `Depends(get_current_user)` を集約。`bcrypt` / `pyjwt` の import はこの 1 モジュールに閉じる。
+- `api/common/security.py` に bcrypt（`hash_password` / `verify_password`）と JWT（HS256 / 60 分有効期限の `create_access_token` / `decode_access_token`）、および `Depends(get_current_user)` を集約。`bcrypt` / `pyjwt` の import は this 1 module に閉じる。
 - `api/repositories/users.py` で `get_user_by_email` / `get_user_by_id` / `create_user` を実装。ルーターは ORM を直接触らない。
 - `api/schemas.py` に `SignupRequest` / `LoginRequest` / `TokenResponse` / `UserResponse` を追加。レスポンスは camelCase（`accessToken` / `tokenType` / `createdAt`）、`response_model_by_alias=True` で配信。`SignupRequest` / `LoginRequest` は `extra="forbid"` で envelope 形（`accessToken` 等）の流用を 422 で弾く。
 - 401 の正規化: `get_current_user` 経由の失敗（ヘッダ欠落・スキーム違い・改ざん・期限切れ・sub 不正・ユーザー不在）はすべて `INVALID_CREDENTIALS_MESSAGE` の 401 に集約。login も未登録 email とパスワード違いを区別せず同一 401 を返す（ユーザー存在有無の漏洩防止）。
@@ -119,33 +119,30 @@
 
 **なぜ**: Phase 1 のゴールである「ユーザー個別の実質価格」を出すために、ユーザーが楽天ランク・Prime 加入・既定カードを登録できる必要がある。
 
-**やること**:
-- `GET /api/me/profile` — 認証ユーザーの Profile を返す。未作成なら 200 OK でデフォルト値（`regular` / 全フラグ false / `default_card_id=null`）を返す
-- `PUT /api/me/profile` — `rakuten_rank` / `is_amazon_prime` / `yahoo_premium` / `default_card_id` を更新。**全フィールド必須の全置換（PUT）**に統一する
-- 入力バリデーション: `default_card_id` は `cards` に存在することを確認（リポジトリ層で SELECT 1 し、外部キー違反より前に 422 で返す）
-- `updated_at` カラムの追加: Alembic マイグレーションで追加し、自動更新を有効化する
-- Enum 連携: `RakutenRank` は JSON 上で**小文字（value）**を使用する
-- TDD: 未認証 401 / 不正カード ID 422 / 正常更新の往復確認
+**実装結果**:
+- `api/routers/profile.py` および `api/repositories/user_profiles.py` を実装。
+- `GET /api/me/profile` — 認証ユーザーの Profile を返す。未作成なら 200 OK でデフォルト値（`regular` / 全フラグ false / `default_card_id=null`）を返す。
+- `PUT /api/me/profile` — `rakuten_rank` / `is_amazon_prime` / `yahoo_premium` / `is_rakuten_mobile` / `is_paypay_linked` / `default_card_id` を一括更新。全フィールド必須。
+- 入力バリデーション: `default_card_id` の存在確認をリポジトリ層で行い、存在しない場合は 422 を返す。
+- 順序制御: バリデーション順序（Pydantic -> 認証 401 -> カード存在 422）を維持するため、`Header(default=None)` でトークンを受け取り手動で `get_current_user` を呼ぶ実装を採用。
+- TDD: `tests/integration/test_profile.py` 18 件（GET/PUT 往復、未認証 401、不正カード 422、default_card の joinedload 返却等）が緑。
 
 **完了条件**: `PUT` 後に `GET` で同値が返る。401/422 が網羅される。`updated_at` が正しく更新される。
 
 ---
 
-### T-06. サイト別ポイント算出ロジックの純粋関数モジュール化
+### T-06. サイト別ポイント算出ロジックの純粋関数モジュール化 ✅
 
 **なぜ**: HTTP 層から切り離した純粋関数として書くことで、TDD でケースを大量に網羅できる。検索 API と単発の見積 API（将来の `POST /api/products/effective-price`）の両方から再利用したい。
 
-**やること**:
-- `api/lib/pricing/` を新設
-  - `base_rates.py` — サイト別の基本還元率テーブル（Amazon 1%、楽天 1%、Yahoo! 1% など）
-  - `rakuten_spu.py` — 楽天 SPU の段階加算（楽天カード 1%、楽天ゴールド 0.5%、Prime / Premium 等）
-  - `yahoo_premium.py` — PayPay / プレミアム加算
-  - `card_bonus.py` — `Card.special_rewards` を読んでサイト別倍率を引く
-  - `effective_price.py` — `effective = max(0, price + shipping - points)` をバックエンド側で再実装
-- 関数シグネチャは `(price: int, shipping: int, site: SiteType, profile: UserProfile | None, card: Card | None) -> Pricing` のように統一し、`Pricing = {points: int, effective_price: int, breakdown: list[Reward]}` を返す
-- TDD: 各サイト × ランク × カード × Prime 有無のパラメタライズドテストを最低 12 ケース
+**実装結果**:
+- `api/lib/pricing/engine.py` を実装。
+- Amazon, 楽天, Yahoo! ショッピングそれぞれのポイント算出ロジックを独立した関数（`calculate_points_amazon` 等）として定義。
+- `UserContext` データクラスを介してユーザー属性（Prime 有無、モバイル契約、PayPay 連携等）を渡し、倍率加算をシミュレートする。
+- 算出結果は `PricingResult`（総ポイント、実質価格、計算内訳 `breakdown`）として返す。
+- TDD: `tests/unit/pricing/test_engine.py` 14 件。楽天ダイヤモンド、Amazon プライム + Mastercard、Yahoo! プレミアム等、主要な組み合わせを網羅。フロントエンドの `effectivePrice.ts` との回帰テストも含む。
 
-**完了条件**: テーブル駆動 hostのテストが緑。`profile=None` のときフロントの `effectivePrice.ts` と同値になる回帰テストを 1 本以上含む。
+**完了条件**: テーブル駆動テストが緑。`profile=None` のときフロントの `effectivePrice.ts` と同値になる回帰テストを 1 本以上含む。
 
 ---
 
