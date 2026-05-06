@@ -75,9 +75,9 @@
 - 価格範囲のクロスフィールド検証はハンドラ側（`_validate_price_range`）。pydantic Query では表現できないため。
 - 操作ログには `q_len` / `hits` / `elapsed_ms` のみを残し、生の `q` は出力しない（ユーザー入力をログに混ぜない方針）。
 
-**現状の整合性メモ:**
+**型整合（T-09 にて解消済み）:**
 
-API は上記の envelope `{items, page, totalPages, totalCount}` を返すが、フロント `frontend/lib/api/searchClient.ts` 側はレスポンスを `Product[]` と仮定してキャストしている。そのため `data.items` を取り損ね、ランタイムでは描画不能になる。T-08（Listing 同梱）でレスポンス形を拡張する際、暫定的に envelope 形を維持するか、フロント側で `data.items` を取り出すかは T-09（OpenAPI 型同期）で確定する。
+`frontend/lib/api/searchClient.ts` を `ProductSearchEnvelope`（`{items, page, totalPages, totalCount, meta}`）形式に修正済み。`frontend/types/api.ts` は OpenAPI スキーマから自動生成されており、フロントの型定義は常にバックエンドの返却形と一致する。
 
 ### 2.3. 商品全件取得（暫定）
 `GET /api/products`
@@ -133,11 +133,11 @@ ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` �
 - バリデーション順序は (1) Pydantic（型・Enum・`extra="forbid"` / bool `strict=True`）→ (2) 認証 401 →(3) `card_exists` 422。順序を固定するためハンドラは `Depends(get_current_user)` を使わず `Header` 経由で受けて body 検証通過後に呼ぶ
 - `defaultCardId` が存在しないカードを参照した場合は 422（FK IntegrityError 経由ではなく事前 SELECT）
 
-## 3. 未実装（Phase 1 で着手予定）
+## 3. Phase 1 残件
 
-詳細は `docs/plans/phase1-foundation.md` を参照。
+Phase 1 の全タスク（T-01〜T-09）は実装済み。残件は CI 自動化のみ。
 
-- OpenAPI → TypeScript 型生成パイプライン（T-09）
+- `.github/workflows/` への `npm run check:api-types` 統合（型ドリフト検知の CI 自動化）
 
 ## 4. 共通エラーレスポンス
 
@@ -151,4 +151,4 @@ ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` �
 
 ## 5. 型同期（Phase 1 完了後）
 
-ADR-005 の方針どおり、Phase 1 終了時点で `api/main.py` の OpenAPI スキーマから `frontend/types/api.ts` を生成する CI を組む（T-09）。それ以前は本仕様書を正本とし、フロントの手書き型と整合させる。
+T-09 にて実装済み。`api/main.py` の FastAPI が公開する `/openapi.json` から `openapi-typescript` で `frontend/types/api.ts` を自動生成している。型同期の手順は `docs/tech/api-type-sync.md` を参照。CI への自動統合（`.github/workflows/`）は残件。

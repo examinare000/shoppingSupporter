@@ -20,8 +20,8 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 ## 現在の進捗
 
 - フロントエンド UI（ヒーロー検索 / 検索結果 / 画像優先度設定）は実装済み
-- バックエンド: モデル定義・公式 API クライアント・Cron・検索 API・認証基盤・カードマスタ API・UserProfile API・ポイント算出エンジン（T-06）・検索 API への UserProfile / Card 統合（T-08）を実装済み
-- **Next Step**: Phase 1 残タスク（OpenAPI 型同期）。詳細は `docs/plans/roadmap.md` を参照
+- バックエンド: モデル定義・公式 API クライアント・Cron・検索 API・認証基盤・カードマスタ API・UserProfile API・ポイント算出エンジン（T-06）・検索 API への UserProfile / Card 統合（T-08）・OpenAPI → TypeScript 型生成パイプライン（T-09）を実装済み
+- **Phase 1 完了**。**Next Step**: Phase 2（価格履歴の可視化）。詳細は `docs/plans/roadmap.md` を参照
 
 ## 今後のロードマップ
 
@@ -29,9 +29,9 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 
 
 ### Phase 1: モック脱却とパーソナライズ基盤
-- フロント fetch 接続は完了済み（残: OpenAPI 型同期による検索レスポンスの frontend 型との整合）
-- `UserProfile` / `Card` 連携によるユーザー固有の還元率反映（UserProfile API / 算出エンジン / 検索 API 統合完了済み）
-- バックエンドでの実質価格計算ロジックの検索 API への統合（完了）
+- フロント fetch 接続・envelope 対応・OpenAPI 型同期（T-09）完了。`frontend/types/api.ts` は自動生成
+- `UserProfile` / `Card` 連携によるユーザー固有の還元率反映（T-08）完了
+- バックエンドでの実質価格計算ロジックの検索 API への統合（T-06 / T-08）完了
 
 ### Phase 2: 価格履歴と可視化
 - `PriceHistory` データの蓄積と取得 API の実装
