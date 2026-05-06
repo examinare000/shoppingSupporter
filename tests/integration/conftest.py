@@ -35,7 +35,7 @@ from sqlalchemy.orm import sessionmaker
 from testcontainers.postgres import PostgresContainer
 
 from api.common.database import get_db
-from api.common.models import Base, Card, Product
+from api.common.models import Base, Card, EcSiteProduct, Product, SiteType
 from api.main import app
 
 
@@ -161,6 +161,38 @@ def make_card():
             base_reward_rate=base_reward_rate,
             annual_fee=annual_fee,
             special_rewards=special_rewards if special_rewards is not None else {},
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_site_product():
+    """Factory for `EcSiteProduct` instances with sensible test defaults.
+
+    The `product` argument must already be committed to the database so that
+    `product.id` is accessible (SQLAlchemy resolves the PK after flush/commit).
+    Tests call `_seed` (or `db_session.commit()`) on the product first, then
+    use this factory.
+
+    `site_type` accepts a lowercase string value ("amazon", "rakuten", "yahoo")
+    and converts it to the matching `SiteType` enum member.
+    """
+
+    def _make(
+        product,
+        site_type="rakuten",
+        site_product_id="ITEM001",
+        url="https://example.com/item",
+    ):
+        resolved_site_type = (
+            SiteType(site_type) if isinstance(site_type, str) else site_type
+        )
+        return EcSiteProduct(
+            product_id=product.id,
+            site_type=resolved_site_type,
+            site_product_id=site_product_id,
+            url=url,
         )
 
     return _make

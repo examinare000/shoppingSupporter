@@ -20,18 +20,23 @@ implementation:
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta
 
 import pytest
 
+from api.common.models import RakutenRank, UserProfile
 from api.repositories.products import SearchParams, search_products
 
 
 ENDPOINT = "/api/products/search"
+SIGNUP_ENDPOINT = "/api/auth/signup"
+LOGIN_ENDPOINT = "/api/auth/login"
 
 # Source of truth for the camelCase response item shape. Asserting on this
 # set (rather than each key individually) lets a single test detect both
 # missing and unexpected keys.
+# `listings` was added as part of T-08 personalization integration.
 EXPECTED_ITEM_KEYS = {
     "id",
     "name",
@@ -40,9 +45,28 @@ EXPECTED_ITEM_KEYS = {
     "tags",
     "inStock",
     "currentPrice",
+    "listings",
 }
 
-EXPECTED_ENVELOPE_KEYS = {"items", "page", "totalPages", "totalCount"}
+# `meta` was added as part of T-08 personalization integration.
+EXPECTED_ENVELOPE_KEYS = {"items", "page", "totalPages", "totalCount", "meta"}
+
+# Source of truth for the nested listing shape within each item.
+EXPECTED_LISTING_KEYS = {
+    "siteType",
+    "siteProductId",
+    "url",
+    "points",
+    "effectivePrice",
+    "breakdown",
+}
+
+# Source of truth for each breakdown entry within a listing.
+EXPECTED_BREAKDOWN_ENTRY_KEYS = {"label", "rate", "points", "note"}
+
+# Source of truth for the meta.personalization shape.
+EXPECTED_META_KEYS = {"personalization"}
+EXPECTED_PERSONALIZATION_KEYS = {"applied", "rakutenRank", "hasCard"}
 
 
 def _seed(session, products):
@@ -725,3 +749,603 @@ class TestEndpointQueryStringContract:
         # Then: the body is ignored and the request succeeds because the
         # only required input (q) comes from the query string.
         assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Helpers for T-08 personalization tests
+# ---------------------------------------------------------------------------
+
+
+def _signup(client, *, email: str, password: str):
+    return client.post(SIGNUP_ENDPOINT, json={"email": email, "password": password})
+
+
+def _login(client, *, email: str, password: str):
+    return client.post(LOGIN_ENDPOINT, json={"email": email, "password": password})
+
+
+def _auth_header(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def auth_token(client):
+    """認証済みユーザーを作成し JWT を返す。パーソナライズテスト用。
+
+    別テストクラスで同名フィクスチャ (test_profile.py の auth_token) が
+    あるが、pytest のモジュールスコープにより互いに干渉しない。
+    """
+    email = "search.user@example.com"
+    password = "SearchPass1!"
+    signup = _signup(client, email=email, password=password)
+    assert signup.status_code == 201
+    login = _login(client, email=email, password=password)
+    assert login.status_code == 200
+    return {
+        "token": login.json()["accessToken"],
+        "user_id": uuid.UUID(signup.json()["id"]),
+    }
+
+
+@pytest.fixture
+def seeded_card(db_session, make_card):
+    """楽天カード（SPU 2%）を永続化して返す。
+
+    Why special_rewards={"rakuten": 2.0}:
+        price=1000 円のときポイント計算が
+        ストア 1% (10pt) + SPU 2% (20pt) = 30pt, 実質価格 970 円
+        という端数なしのきれいな値になり、テストで断言しやすい。
+        test_profile.py の seeded_card ({"rakuten": 1.0}) とは別の
+        モジュールスコープのフィクスチャなので干渉しない。
+    """
+    card = make_card(
+        name="楽天カード",
+        base_reward_rate=1.0,
+        annual_fee=0,
+        special_rewards={"rakuten": 2.0},
+    )
+    db_session.add(card)
+    db_session.commit()
+    db_session.refresh(card)
+    return card
+
+
+# ---------------------------------------------------------------------------
+# T-08: meta フィールドの形（未認証でも meta は常に返る）
+# ---------------------------------------------------------------------------
+
+
+class TestEndpointMetaShape:
+    """meta フィールドの構造を固定する。
+
+    meta は認証有無に関わらず常にレスポンスに含まれる。
+    キー集合の検証を EXPECTED_*_KEYS 定数に集約し、フィールドの追加・
+    削除を単一箇所で検出できるようにしている。
+    """
+
+    def test_envelope_should_include_meta_field(
+        self, client, db_session, make_product
+    ):
+        # Given: a matching product (unauthenticated context)
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search without auth
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: meta is present at the envelope level
+        assert response.status_code == 200
+        assert "meta" in response.json()
+
+    def test_envelope_should_have_exactly_expected_top_level_keys(
+        self, client, db_session, make_product
+    ):
+        # Given: a matching product
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search without auth
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: envelope keys are exactly the expected set (meta included)
+        assert set(response.json().keys()) == EXPECTED_ENVELOPE_KEYS
+
+    def test_meta_should_have_exactly_personalization_key(
+        self, client, db_session, make_product
+    ):
+        # Given: a matching product
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search without auth
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: meta contains exactly {"personalization"}
+        meta = response.json()["meta"]
+        assert set(meta.keys()) == EXPECTED_META_KEYS
+
+    def test_personalization_should_have_required_keys(
+        self, client, db_session, make_product
+    ):
+        # Given: a matching product
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search without auth
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: personalization contains exactly {applied, rakutenRank, hasCard}
+        personalization = response.json()["meta"]["personalization"]
+        assert set(personalization.keys()) == EXPECTED_PERSONALIZATION_KEYS
+
+    def test_zero_results_should_still_return_meta(self, client):
+        # Given: no products in DB
+        # When: search that matches nothing
+        response = client.get(ENDPOINT, params={"q": "totally-nonexistent-xyz"})
+
+        # Then: 200 with empty items, meta is still present
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"] == []
+        assert "meta" in body
+        assert "personalization" in body["meta"]
+
+
+# ---------------------------------------------------------------------------
+# T-08: listings フィールドの形
+# ---------------------------------------------------------------------------
+
+
+class TestEndpointListingsShape:
+    """listings フィールドの構造を固定する。
+
+    各 item には listings リストが含まれ、各 listing は EcSiteProduct 1 件に
+    対応する。サイト固有メタデータ (siteType / siteProductId / url) と
+    ポイント計算フィールド (points / effectivePrice / breakdown) を持つ。
+    """
+
+    def test_items_should_include_listings_field(
+        self, client, db_session, make_product
+    ):
+        # Given: a product without any site product
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: listings field is present (empty list, not null)
+        items = response.json()["items"]
+        assert len(items) == 1
+        assert "listings" in items[0]
+
+    def test_item_without_site_products_should_have_empty_listings(
+        self, client, db_session, make_product
+    ):
+        # Given: a product with no EcSiteProduct rows
+        _seed(db_session, [make_product(name="apple", current_price=1000)])
+
+        # When: search
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: listings is [] (not null; list is always present, just empty)
+        item = response.json()["items"][0]
+        assert item["listings"] == []
+
+    def test_listing_should_have_required_keys(
+        self, client, db_session, make_product, make_site_product
+    ):
+        # Given: a product with one site product
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(
+            make_site_product(
+                product,
+                "rakuten",
+                site_product_id="RAKU001",
+                url="https://item.rakuten.co.jp/test/RAKU001/",
+            )
+        )
+        db_session.commit()
+
+        # When: unauthenticated search
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: listing has exactly the expected camelCase keys
+        listings = response.json()["items"][0]["listings"]
+        assert len(listings) == 1
+        assert set(listings[0].keys()) == EXPECTED_LISTING_KEYS
+
+    def test_listing_should_expose_correct_site_metadata(
+        self, client, db_session, make_product, make_site_product
+    ):
+        # Given: a rakuten site product with known identifiers
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(
+            make_site_product(
+                product,
+                "rakuten",
+                site_product_id="RAKU001",
+                url="https://item.rakuten.co.jp/test/RAKU001/",
+            )
+        )
+        db_session.commit()
+
+        # When: search
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: siteType / siteProductId / url match the seeded values
+        listing = response.json()["items"][0]["listings"][0]
+        assert listing["siteType"] == "rakuten"
+        assert listing["siteProductId"] == "RAKU001"
+        assert listing["url"] == "https://item.rakuten.co.jp/test/RAKU001/"
+
+    def test_product_with_multiple_site_products_should_have_multiple_listings(
+        self, client, db_session, make_product, make_site_product
+    ):
+        # Given: one product linked to both Amazon and Rakuten
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(
+            make_site_product(
+                product,
+                "amazon",
+                site_product_id="ASIN001",
+                url="https://amazon.co.jp/dp/ASIN001",
+            )
+        )
+        db_session.add(
+            make_site_product(
+                product,
+                "rakuten",
+                site_product_id="RAKU001",
+                url="https://item.rakuten.co.jp/test/RAKU001/",
+            )
+        )
+        db_session.commit()
+
+        # When: search
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: 2 listings, one per site
+        listings = response.json()["items"][0]["listings"]
+        assert len(listings) == 2
+        site_types = {listing["siteType"] for listing in listings}
+        assert site_types == {"amazon", "rakuten"}
+
+
+# ---------------------------------------------------------------------------
+# T-08: パーソナライズ動作（未認証 / 認証済み × プロフィール有無 × カード有無）
+# ---------------------------------------------------------------------------
+
+
+class TestEndpointPersonalizationBehavior:
+    """検索パーソナライズの動作仕様。
+
+    テスト戦略 (order.md より):
+        - 未認証: applied=false, points/effectivePrice/breakdown=null
+        - 認証済み・プロフィール未設定: applied=false, points=null
+        - 認証済み・プロフィール設定済み・カード設定あり: applied=true, points 計算済み
+        - 認証済み・プロフィール設定済み・カード未設定: applied=true, カードなし計算
+        - 検索結果 0 件: items=[], meta.personalization は返る
+        - 無効トークン: 401 を返さず未認証として扱う (applied=false)
+    """
+
+    def test_unauthenticated_should_have_applied_false(
+        self, client, db_session, make_product
+    ):
+        # Given: a product (no auth)
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search without Authorization header
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: personalization is not applied
+        assert response.status_code == 200
+        personalization = response.json()["meta"]["personalization"]
+        assert personalization["applied"] is False
+        assert personalization["rakutenRank"] is None
+        assert personalization["hasCard"] is False
+
+    def test_unauthenticated_listings_should_have_null_pricing_fields(
+        self, client, db_session, make_product, make_site_product
+    ):
+        # Given: a product with a site product, no auth
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.commit()
+
+        # When: search without auth
+        response = client.get(ENDPOINT, params={"q": "apple"})
+
+        # Then: pricing fields are null (no user to compute against)
+        listing = response.json()["items"][0]["listings"][0]
+        assert listing["points"] is None
+        assert listing["effectivePrice"] is None
+        assert listing["breakdown"] is None
+
+    def test_invalid_token_should_not_return_401(
+        self, client, db_session, make_product
+    ):
+        # Given: a product and an invalid JWT
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search with a malformed Bearer token
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers={"Authorization": "Bearer invalid-jwt-token"},
+        )
+
+        # Then: 200 (not 401); get_current_user_optional silently ignores bad tokens
+        assert response.status_code == 200
+
+    def test_invalid_token_should_treat_as_unauthenticated(
+        self, client, db_session, make_product
+    ):
+        # Given: a product and an invalid JWT
+        _seed(db_session, [make_product(name="apple")])
+
+        # When: search with a malformed Bearer token
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers={"Authorization": "Bearer invalid-jwt-token"},
+        )
+
+        # Then: applied=false (treated as anonymous, not error)
+        personalization = response.json()["meta"]["personalization"]
+        assert personalization["applied"] is False
+
+    def test_authenticated_without_profile_should_have_applied_false(
+        self, client, db_session, make_product, make_site_product, auth_token
+    ):
+        # Given: authenticated user with no saved UserProfile
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.commit()
+
+        # When: search with valid token but no profile
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: personalization not applied (no profile to read from)
+        assert response.status_code == 200
+        personalization = response.json()["meta"]["personalization"]
+        assert personalization["applied"] is False
+
+    def test_authenticated_without_profile_listings_should_have_null_points(
+        self, client, db_session, make_product, make_site_product, auth_token
+    ):
+        # Given: authenticated user with no profile + site product
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.commit()
+
+        # When: search with auth (no profile)
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: points null (no profile, no computation)
+        listing = response.json()["items"][0]["listings"][0]
+        assert listing["points"] is None
+        assert listing["effectivePrice"] is None
+
+    def test_authenticated_with_profile_and_card_should_have_applied_true(
+        self, client, db_session, make_product, make_site_product, auth_token, seeded_card
+    ):
+        # Given: product + rakuten site product + profile with card
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.add(
+            UserProfile(
+                user_id=auth_token["user_id"],
+                rakuten_rank=RakutenRank.REGULAR,
+                is_amazon_prime=False,
+                yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
+                default_card_id=seeded_card.id,
+            )
+        )
+        db_session.commit()
+
+        # When: search with auth
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: personalization applied, meta reflects profile state
+        assert response.status_code == 200
+        personalization = response.json()["meta"]["personalization"]
+        assert personalization["applied"] is True
+        assert personalization["rakutenRank"] == "regular"
+        assert personalization["hasCard"] is True
+
+    def test_authenticated_with_profile_and_card_listings_should_have_points(
+        self, client, db_session, make_product, make_site_product, auth_token, seeded_card
+    ):
+        """楽天カード (SPU 2%) × 楽天サイト × 1000 円の計算値を end-to-end で検証する。
+
+        期待値の根拠 (engine.calculate_points_rakuten より):
+            ストア 1% = floor(1000 * 0.01) = 10 pt
+            SPU 2%   = floor(1000 * 0.02) = 20 pt
+            total    = 30 pt
+            effective = max(0, 1000 + 0 - 30) = 970 円  (送料 DB 未記録 → 0)
+        """
+        # Given: price=1000 product + rakuten site + profile with seeded_card (SPU 2%)
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.add(
+            UserProfile(
+                user_id=auth_token["user_id"],
+                rakuten_rank=RakutenRank.REGULAR,
+                is_amazon_prime=False,
+                yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
+                default_card_id=seeded_card.id,
+            )
+        )
+        db_session.commit()
+
+        # When: search with auth
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: points and effectivePrice match the deterministic calculation
+        listing = response.json()["items"][0]["listings"][0]
+        assert listing["points"] == 30
+        assert listing["effectivePrice"] == 970
+        assert listing["breakdown"] is not None
+        assert isinstance(listing["breakdown"], list)
+        assert len(listing["breakdown"]) > 0
+
+    def test_breakdown_entries_should_have_required_keys(
+        self, client, db_session, make_product, make_site_product, auth_token, seeded_card
+    ):
+        # Given: profile + card + site product (same setup as above)
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.add(
+            UserProfile(
+                user_id=auth_token["user_id"],
+                rakuten_rank=RakutenRank.REGULAR,
+                is_amazon_prime=False,
+                yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
+                default_card_id=seeded_card.id,
+            )
+        )
+        db_session.commit()
+
+        # When: search with auth
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: each breakdown entry has exactly {label, rate, points, note}
+        breakdown = response.json()["items"][0]["listings"][0]["breakdown"]
+        assert len(breakdown) > 0
+        for entry in breakdown:
+            assert set(entry.keys()) == EXPECTED_BREAKDOWN_ENTRY_KEYS
+
+    def test_authenticated_with_profile_no_card_should_have_applied_true(
+        self, client, db_session, make_product, make_site_product, auth_token
+    ):
+        # Given: profile with default_card_id=None
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.add(
+            UserProfile(
+                user_id=auth_token["user_id"],
+                rakuten_rank=RakutenRank.GOLD,
+                is_amazon_prime=False,
+                yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
+                default_card_id=None,
+            )
+        )
+        db_session.commit()
+
+        # When: search with auth
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: applied is true (profile exists), hasCard is false
+        personalization = response.json()["meta"]["personalization"]
+        assert personalization["applied"] is True
+        assert personalization["hasCard"] is False
+        assert personalization["rakutenRank"] == "gold"
+
+    def test_authenticated_with_profile_no_card_listings_should_have_points(
+        self, client, db_session, make_product, make_site_product, auth_token
+    ):
+        """カードなし × 楽天サイト × 1000 円の計算値を end-to-end で検証する。
+
+        期待値の根拠 (engine.calculate_points_rakuten より):
+            ストア 1%     = floor(1000 * 0.01) = 10 pt
+            カード基本 1% = floor(1000 * 1.0/100) = 10 pt  (card_base_rate=1.0 default)
+            total         = 20 pt
+            effective     = max(0, 1000 + 0 - 20) = 980 円
+        """
+        # Given: profile with no default card, rakuten site product
+        product = make_product(name="apple", current_price=1000)
+        _seed(db_session, [product])
+        db_session.add(make_site_product(product, "rakuten"))
+        db_session.add(
+            UserProfile(
+                user_id=auth_token["user_id"],
+                rakuten_rank=RakutenRank.REGULAR,
+                is_amazon_prime=False,
+                yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
+                default_card_id=None,
+            )
+        )
+        db_session.commit()
+
+        # When: search with auth
+        response = client.get(
+            ENDPOINT,
+            params={"q": "apple"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: points calculated with card_base_rate=1.0 (no special rewards)
+        listing = response.json()["items"][0]["listings"][0]
+        assert listing["points"] == 20
+        assert listing["effectivePrice"] == 980
+
+    def test_zero_results_authenticated_should_return_applied_true(
+        self, client, db_session, auth_token
+    ):
+        # Given: authenticated user with a profile (no matching product)
+        db_session.add(
+            UserProfile(
+                user_id=auth_token["user_id"],
+                rakuten_rank=RakutenRank.REGULAR,
+                is_amazon_prime=False,
+                yahoo_premium=False,
+                is_rakuten_mobile=False,
+                is_paypay_linked=False,
+                default_card_id=None,
+            )
+        )
+        db_session.commit()
+
+        # When: search that matches nothing
+        response = client.get(
+            ENDPOINT,
+            params={"q": "totally-nonexistent-product-xyz"},
+            headers=_auth_header(auth_token["token"]),
+        )
+
+        # Then: 200, empty items, but meta.personalization reflects the user
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"] == []
+        personalization = body["meta"]["personalization"]
+        assert personalization["applied"] is True

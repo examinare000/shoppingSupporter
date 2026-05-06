@@ -138,3 +138,21 @@ def get_current_user(
     if user is None:
         raise _unauthorized()
     return user
+
+
+def get_current_user_optional(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """JWT 認証済みユーザーを返す。未認証・無効トークンは None を返す FastAPI 依存性。
+
+    Why None を返すか:
+        検索エンドポイントは公開エンドポイントだが、認証済みの場合は
+        パーソナライズを適用する（T-08 設計）。無効なトークンも
+        401 を返さず None として扱い、未認証ユーザーと同様に扱う。
+        （T-08 テスト戦略: 「無効トークンは 401 を返さず未認証として扱う」）
+    """
+    try:
+        return get_current_user(authorization=authorization, db=db)
+    except HTTPException:
+        return None
