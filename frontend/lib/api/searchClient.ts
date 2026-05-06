@@ -1,4 +1,4 @@
-import type { Product } from '@/types/product';
+import type { ProductSearchEnvelope } from '@/types/product';
 import { buildProductsSearchUrl } from '@/lib/api/endpoints';
 
 /**
@@ -10,10 +10,11 @@ import { buildProductsSearchUrl } from '@/lib/api/endpoints';
  *   try/catch で握りつぶさないことで SWR にエラーを伝え、画面側でリトライ UI を出せるようにする
  *   （Fail Fast / 横断的関心事を API クライアント層に閉じ込める）。
  * - URL 組み立ては `buildProductsSearchUrl` に委譲する。検索パスやクエリパラメータ名の散在を防ぐ。
- * - レスポンス body は `Product[]` 直返しを前提とする。型ガードを挟まないのは、サーバー応答信頼の前提
- *   （バックエンドは OpenAPI で型同期する設計。ADR-005 §5）。
+ * - T-09 以降: バックエンドは {items, page, totalPages, totalCount, meta} の envelope を返す。
+ *   旧実装の Product[] 直返しは型不整合だったため ProductSearchEnvelope に修正
+ *   （backend-spec.md 行 161 の既知型不整合を解消）。
  */
-export async function searchProducts(query: string): Promise<Product[]> {
+export async function searchProducts(query: string): Promise<ProductSearchEnvelope> {
   const response = await fetch(buildProductsSearchUrl(query), { method: 'GET' });
 
   if (!response.ok) {
@@ -23,5 +24,5 @@ export async function searchProducts(query: string): Promise<Product[]> {
     );
   }
 
-  return (await response.json()) as Product[];
+  return (await response.json()) as ProductSearchEnvelope;
 }

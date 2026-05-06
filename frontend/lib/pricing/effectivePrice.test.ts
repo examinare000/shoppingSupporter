@@ -2,34 +2,40 @@ import { describe, it, expect } from 'vitest';
 import { calculateEffectivePrice } from '@/lib/pricing/effectivePrice';
 import type { Listing } from '@/types/product';
 
+/**
+ * calculateEffectivePrice のテスト仕様（T-09 以降）
+ *
+ * 旧実装: price + shippingFee - points で算出（フロント計算）
+ * 新実装: バックエンドが算出済みの ListingOut.effectivePrice をそのまま返す。
+ *         null の場合のみ 0 を返す（Fail Fast の例外: バックエンドが未計算でも画面を壊さない）。
+ */
 const baseListing: Listing = {
-  site: 'amazon',
+  siteType: 'amazon',
   siteProductId: 'B000TEST',
   url: 'https://example.com/item',
-  price: 1000,
-  shippingFee: 300,
   points: 100,
-  pointRate: 0.01,
-  inStock: true,
+  effectivePrice: 900,
+  breakdown: null,
 };
 
 describe('calculateEffectivePrice', () => {
-  it('通常ケース: 本体価格 + 送料 - ポイントが返る', () => {
-    expect(calculateEffectivePrice(baseListing)).toBe(1200);
+  it('effectivePrice が正の数値のとき、その値をそのまま返す', () => {
+    // Given: バックエンドが算出した effectivePrice = 900
+    // When: calculateEffectivePrice を呼ぶ
+    // Then: 900 が返る（フロントで再計算しない）
+    expect(calculateEffectivePrice(baseListing)).toBe(900);
   });
 
-  it('送料無料の場合は本体価格 - ポイントが返る', () => {
-    const listing: Listing = { ...baseListing, shippingFee: 0 };
-    expect(calculateEffectivePrice(listing)).toBe(900);
-  });
-
-  it('ポイントが価格を上回る場合は0を返す（負数を許容しない）', () => {
-    const listing: Listing = { ...baseListing, price: 100, shippingFee: 0, points: 500 };
+  it('effectivePrice が 0 のとき 0 を返す', () => {
+    // Given: 完全無料（effectivePrice = 0）
+    const listing: Listing = { ...baseListing, effectivePrice: 0 };
     expect(calculateEffectivePrice(listing)).toBe(0);
   });
 
-  it('価格・送料・ポイントが全て0の場合は0を返す', () => {
-    const listing: Listing = { ...baseListing, price: 0, shippingFee: 0, points: 0 };
+  it('effectivePrice が null のとき 0 を返す', () => {
+    // Given: 未認証・プロフィール未設定のとき null が返る（T-08 仕様）
+    const listing: Listing = { ...baseListing, effectivePrice: null };
+    // Then: 画面が壊れないよう 0 で下限を切る
     expect(calculateEffectivePrice(listing)).toBe(0);
   });
 
