@@ -1,6 +1,6 @@
 # Card マスタ API
 
-最終更新: 2026-05-05（T-04 実装反映）
+最終更新: 2026-05-06（T-04 実装反映）
 
 `Card` テーブルが保持する「クレジットカードの還元率マスタ」を公開する読み取り専用 API。Phase 1 では書き込み系 API を持たず、行の投入は seed スクリプト（`api/common/seed/cards.py`）で行う。
 
@@ -83,3 +83,9 @@ python -m api.common.seed.cards
 ```
 
 冪等性: `name` をキーとして既存行を検索し、存在すればフィールドを更新（UPDATE）、存在しなければ新規挿入（INSERT）を行う。`UserProfile.default_card_id` の参照を破壊せずに最新の還元率を反映できる。
+
+## 6. テストレイヤー
+
+| ファイル | 件数 | 観点 |
+|---|---|---|
+| `tests/integration/test_cards.py` | 18 | 一覧の並び・空配列・camelCase 完全一致 / 詳細の 200・404・422 / 公開エンドポイント / seed の冪等性・名称一致 |
