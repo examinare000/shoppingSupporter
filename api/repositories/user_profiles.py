@@ -15,7 +15,7 @@ Why この層を持つか:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -80,7 +80,7 @@ def upsert_profile(
         `is_paypay_linked` を追加してもパラメータスワップが起きないよう、
         keyword-only を継続する。
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     stmt = pg_insert(UserProfile).values(
         user_id=user_id,
         rakuten_rank=rakuten_rank,
