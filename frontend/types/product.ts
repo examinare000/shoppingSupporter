@@ -1,25 +1,17 @@
+// ─── サーバ生成型（再エクスポート） ─────────────────────────────────────────
+// 手書きの Listing / Product 定義はここで廃止し、バックエンド型との二重管理を解消する
+// （ADR-012: OpenAPI スキーマを正本とする型同期戦略）。
+import type { components } from './api';
+
+export type Listing               = components["schemas"]["ListingOut"];
+export type Product               = components["schemas"]["ProductSummary"];
+export type ProductSearchEnvelope = components["schemas"]["ProductSearchEnvelope"];
+
+// ─── フロント固有型（手書きのまま） ─────────────────────────────────────────
+// 以下の型はバックエンド API には存在せず、フロント表示ロジック専用のため手書きを維持する。
+
+/** EC サイト識別子。バックエンドの SiteType Enum.value（小文字 3 値固定）と対応する */
 export type SiteType = 'amazon' | 'rakuten' | 'yahoo';
-
-export interface Listing {
-  site: SiteType;
-  siteProductId: string; // ASIN / itemCode / yahooItemId
-  url: string; // 外部商品ページ
-  price: number; // 本体価格（円・税込）
-  shippingFee: number; // 送料（円、0=送料無料）
-  points: number; // 獲得ポイント（円換算）
-  pointRate: number; // 還元率 0.01 = 1%
-  imageUrl?: string; // 商品画像（任意）
-  seller?: string; // 出品者名
-  inStock: boolean;
-}
-
-export interface Product {
-  id: string; // UUID風文字列
-  name: string;
-  janCode?: string;
-  category: string;
-  listings: Listing[]; // 各サイトの出品（最大3件）
-}
 
 /** 画像取得優先度。先頭が最優先。長さ3でSiteTypeを1回ずつ含む */
 export type ImagePriority = readonly [SiteType, SiteType, SiteType];

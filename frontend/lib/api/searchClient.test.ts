@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { searchProducts } from '@/lib/api/searchClient';
 import { buildProductsSearchUrl } from '@/lib/api/endpoints';
-import type { Product } from '@/types/product';
+import type { ProductSearchEnvelope } from '@/types/product';
 
 /**
  * 設計意図:
@@ -10,26 +10,44 @@ import type { Product } from '@/types/product';
  *   一致していることを行動レベルで保証する。
  * - エラーハンドリングは「Response.ok でなければ throw、ネットワーク例外はそのまま伝播」を契約とする。
  *   SWR がエラーを受け取って画面側に伝播させる前提（横断的関心事を API クライアント層に閉じ込める）。
+ *
+ * T-09 変更点:
+ * - 返却型を Product[] → ProductSearchEnvelope に変更（バックエンドの実際のレスポンス形式に合わせる）。
+ *   旧実装は Product[] 直返しを前提としていたが、バックエンドは {items, page, ...} 形式の
+ *   envelope を返しており、型不整合を解消する。
  */
-const sampleProduct: Product = {
-  id: 'p-001',
-  name: 'ワイヤレスイヤホン Pro X3 / Wireless Earbuds Pro X3',
-  janCode: '4901234567001',
-  category: 'オーディオ',
-  listings: [
+const sampleEnvelope: ProductSearchEnvelope = {
+  items: [
     {
-      site: 'amazon',
-      siteProductId: 'B0AMZN0001',
-      url: 'https://www.amazon.co.jp/dp/B0AMZN0001',
-      price: 12800,
-      shippingFee: 0,
-      points: 128,
-      pointRate: 0.01,
+      id: 'p-001',
+      name: 'ワイヤレスイヤホン Pro X3 / Wireless Earbuds Pro X3',
+      description: null,
       imageUrl: 'https://example.com/img.jpg',
-      seller: 'Amazon.co.jp',
+      tags: ['audio'],
       inStock: true,
+      currentPrice: 12800,
+      listings: [
+        {
+          siteType: 'amazon',
+          siteProductId: 'B0AMZN0001',
+          url: 'https://www.amazon.co.jp/dp/B0AMZN0001',
+          points: 128,
+          effectivePrice: 12672,
+          breakdown: null,
+        },
+      ],
     },
   ],
+  page: 1,
+  totalPages: 1,
+  totalCount: 1,
+  meta: {
+    personalization: {
+      applied: false,
+      rakutenRank: null,
+      hasCard: false,
+    },
+  },
 };
 
 function jsonResponse(body: unknown, init: ResponseInit = { status: 200 }): Response {
@@ -51,20 +69,22 @@ describe('searchProducts (fetch-based API クライアント)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('正常系: レスポンス JSON を Product[] として解決する Promise を返す', async () => {
-    // Given: バックエンドが Product[] を JSON で返す
-    fetchMock.mockResolvedValueOnce(jsonResponse([sampleProduct]));
+  it('正常系: レスポンス JSON を ProductSearchEnvelope として解決する Promise を返す', async () => {
+    // Given: バックエンドが ProductSearchEnvelope を JSON で返す
+    fetchMock.mockResolvedValueOnce(jsonResponse(sampleEnvelope));
 
     // When: searchProducts を呼ぶ
     const result = await searchProducts('イヤホン');
 
-    // Then: Product[] として返る（中身が同型・同値）
-    expect(result).toEqual([sampleProduct]);
-    expect(Array.isArray(result)).toBe(true);
+    // Then: envelope 形式で返る（items が配列）
+    expect(result).toEqual(sampleEnvelope);
+    expect(Array.isArray(result.items)).toBe(true);
+    // バグチェック: envelope ではなく items 配列そのものを返していないこと
+    expect(Array.isArray(result)).toBe(false);
   });
 
   it('buildProductsSearchUrl が組み立てた URL に対して fetch を呼ぶ', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockResolvedValueOnce(jsonResponse(sampleEnvelope));
 
     await searchProducts('イヤホン');
 
@@ -75,7 +95,7 @@ describe('searchProducts (fetch-based API クライアント)', () => {
   });
 
   it('HTTP メソッドは GET（明示指定 or 既定値どちらでも GET）', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockResolvedValueOnce(jsonResponse(sampleEnvelope));
 
     await searchProducts('q');
 
@@ -86,7 +106,7 @@ describe('searchProducts (fetch-based API クライアント)', () => {
   });
 
   it('日本語・空白・特殊文字は URL 経由でエンコードされて送信される', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockResolvedValueOnce(jsonResponse(sampleEnvelope));
 
     await searchProducts('a&b イヤホン');
 
@@ -97,12 +117,20 @@ describe('searchProducts (fetch-based API クライアント)', () => {
     expect(queryPart).not.toMatch(/[&\s]/);
   });
 
-  it('空配列の応答も正しく解決する（ヒット 0 件は成功扱い）', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+  it('空の items リストを持つ envelope を正しく解決する（ヒット 0 件は成功扱い）', async () => {
+    const emptyEnvelope: ProductSearchEnvelope = {
+      items: [],
+      page: 1,
+      totalPages: 0,
+      totalCount: 0,
+      meta: { personalization: { applied: false, rakutenRank: null, hasCard: false } },
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(emptyEnvelope));
 
     const result = await searchProducts('絶対に存在しない商品名');
 
-    expect(result).toEqual([]);
+    expect(result).toEqual(emptyEnvelope);
+    expect(result.items).toHaveLength(0);
   });
 
   it('HTTP 4xx (404) は Error を throw する', async () => {

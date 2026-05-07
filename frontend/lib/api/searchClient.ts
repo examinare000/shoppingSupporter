@@ -1,12 +1,5 @@
-import type { Product } from '@/types/product';
+import type { ProductSearchEnvelope } from '@/types/product';
 import { buildProductsSearchUrl } from '@/lib/api/endpoints';
-
-export interface ProductSearchEnvelope {
-  items: Product[];
-  page: number;
-  totalPages: number;
-  totalCount: number;
-}
 
 /**
  * 商品検索 API クライアント。
@@ -17,8 +10,9 @@ export interface ProductSearchEnvelope {
  *   try/catch で握りつぶさないことで SWR にエラーを伝え、画面側でリトライ UI を出せるようにする
  *   （Fail Fast / 横断的関心事を API クライアント層に閉じ込める）。
  * - URL 組み立ては `buildProductsSearchUrl` に委譲する。検索パスやクエリパラメータ名の散在を防ぐ。
- * - レスポンス body は envelope 形式（items / totalCount 等）。totalCount はページをまたいだ
- *   総件数を表し、items.length（現ページ件数）とは異なる（ADR-005 §5）。
+ * - T-09 以降: バックエンドは {items, page, totalPages, totalCount, meta} の envelope を返す。
+ *   旧実装の Product[] 直返しは型不整合だったため ProductSearchEnvelope に修正
+ *   （backend-spec.md 行 161 の既知型不整合を解消）。
  */
 export async function searchProducts(query: string): Promise<ProductSearchEnvelope> {
   const response = await fetch(buildProductsSearchUrl(query), { method: 'GET' });

@@ -11,7 +11,7 @@ import { Spinner } from '@/components/feedback/Spinner';
 import { SearchErrorState } from '@/components/feedback/SearchErrorState';
 import { useImagePriority } from '@/lib/hooks/useImagePriority';
 import { searchProducts } from '@/lib/api/searchClient';
-import type { ProductSearchEnvelope } from '@/lib/api/searchClient';
+import type { ProductSearchEnvelope } from '@/types/product';
 import { buildProductsSearchUrl } from '@/lib/api/endpoints';
 
 /**
@@ -27,6 +27,9 @@ import { buildProductsSearchUrl } from '@/lib/api/endpoints';
  *   SWR の `key` を「空クエリのとき null」にすることで、検索前の不要 fetch を抑止する。
  * - エラー時のリトライは `mutate()` を直接呼ぶ。同じ key で再検証が走るため、
  *   ユーザーがクエリを再入力する手間を省ける。
+ *
+ * T-09 以降: searchProducts は ProductSearchEnvelope を返す。
+ *   data.items を SearchResultsSection に渡すことで商品リストを表示する。
  */
 export default function HomePage() {
   const [query, setQuery] = useState('');
@@ -69,7 +72,6 @@ export default function HomePage() {
               <SearchResultsSection
                 query={query}
                 products={data.items}
-                totalCount={data.totalCount}
                 priority={priority}
                 onMoveUp={moveUp}
                 onMoveDown={moveDown}

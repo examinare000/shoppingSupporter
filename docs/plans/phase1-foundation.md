@@ -43,8 +43,8 @@
 | T-05 | `UserProfile` API（参照・更新） | ✅ 完了 | T-03 | T-04 と並列可 |
 | T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ✅ 完了 | T-02 | T-04, T-05 と並列可 |
 | T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了 | T-01, T-02 | T-06 と並列可 |
-| T-08 | 検索 API への UserProfile / Card 統合 | ⏳ 未着手 | T-05, T-06, T-07 | × |
-| T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | ⏳ 未着手 | T-04〜T-08 のうち API 形が確定したもの | × |
+| T-08 | 検索 API への UserProfile / Card 統合 | ✅ 完了 | T-05, T-06, T-07 | × |
+| T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | ✅ 完了 | T-04〜T-08 のうち API 形が確定したもの | × |
 
 ---
 
@@ -158,39 +158,36 @@
 - 入力エラーは 200+空配列ではなく 422（`q` 欠落・空・101 文字以上、`priceMin > priceMax`、非数 / 負数、不正な `sort`、`page` ≤ 0 など）。
 - TDD: 105 件中 52 件が本機能のテスト（FTS / trigram / フィルタ / ソート / ページング / 422 / クエリストリング契約）。
 
-**未着手の Phase 1 ギャップ**: 現在のレスポンスは `Product` 単体のサマリ（`ProductSummary`）のみで、`EcSiteProduct` / `Listing[]` の同梱は未実装。フロントが `types/product.ts` の `Listing` を要求する場面では T-08 と合わせてレスポンス形を再設計する。
-
-**型不整合リスク**: フロント `Product` 型は `listings: Listing[]` を必須とするが、API `ProductSummary` には `listings` を含まない。さらに API は envelope `{items, page, totalPages, totalCount}` を返すのに対し、`searchClient` は `Product[]` 直返しを期待しており、現状の `/api/products/search` 結果はフロントで描画できない。T-08（Listing 同梱）と T-09（OpenAPI 型同期）でフロントクライアントを envelope 受け取りに修正する必要がある。
+**型不整合リスク（解消済み）**: T-09 にて `frontend/types/api.ts` を OpenAPI スキーマから自動生成し、`searchClient.ts` を `ProductSearchEnvelope`（`{items, page, totalPages, totalCount, meta}`）形式に修正済み。フロント `Product` 型は `api.ts` からの再エクスポートに移行し、手書き二重管理は解消された。
 
 ---
 
-### T-08. 検索 API への UserProfile / Card 統合
+### T-08. 検索 API への UserProfile / Card 統合 ✅
 
 **なぜ**: 「ユーザーごとの実質価格」を返すという Phase 1 の主目的を満たす最後のピース。匿名アクセス時のフォールバック挙動も同時に確定させる。
 
-**やること**:
-- `Depends(get_current_user_optional)` を新設し、未認証でも 200 を返す扱いにする
-- 認証ありの場合は `UserProfile` と `default_card` を引いて T-06 の関数群へ渡し、各 `Listing` に `points` / `effectivePrice` / `breakdown` を載せる
-- 認証なしの場合は `profile=None, card=None` でフォールバック計算（=現状フロントと同じ素の式）
-- レスポンスに `personalization: { applied: bool, profile_summary?: ... }` を追加し、フロントの表示分岐を簡単にする
-- TDD: 認証あり / なし両方で同じクエリの結果を比較し、`points` の差分が期待値どおりであること
-
-**完了条件**: 楽天ダイヤモンド + 楽天カード保有ユーザーの楽天サイト商品で SPU 加算が反映される。匿名で同じリクエストを叩くと素の値に戻る。
+**実装結果**:
+- `Depends(get_current_user_optional)` を使用し、未認証でも 200 を返すように実装。
+- 認証ありの場合は `UserProfile` と `default_card` を引いて T-06 の関数群へ渡し、各 `Listing` に `points` / `effectivePrice` / `breakdown` を載せて返す。
+- 認証なしの場合は `points` / `effectivePrice` / `breakdown` を `null` で返す（T-08 設計方針）。
+- レスポンスの `meta` フィールドに `personalization: { applied: bool, rakutenRank?: string, hasCard: bool }` を追加。
+- TDD: `tests/integration/test_product_search.py` にて認証あり/なし、プロフィール有無、カード有無の全パターンを網羅。
 
 ---
 
-### T-09. OpenAPI スキーマ公開と TypeScript 型生成
+### T-09. OpenAPI スキーマ公開と TypeScript 型生成 ✅
 
-**なぜ**: ADR-005 の決定。フロント側の `Product` / `Listing` 型を手書きで二重管理すると、Phase 2 移行で必ず崩れる。Phase 1 の API 形が固まる T-08 直後に組み込み、CI で型ドリフトを検出できる状態にする。
+**なぜ**: ADR-005 の決定。フロント側の `Product` / `Listing` 型を手書きで二重管理すると、Phase 2 移行で必ず崩れる。Phase 1 の API 形が固まる T-08 直後に組み込み、型ドリフトを検出できる状態にする。
 
-**やること**:
-- `api/main.py` で `openapi.json` のエクスポート手段を確立（FastAPI 既定の `/openapi.json` をそのまま使うか、ビルドスクリプターでファイル化）
-- `frontend/package.json` に `openapi-typescript` を追加し、`npm run gen:api` で `frontend/types/api.ts` を生成
-- `frontend/types/product.ts` のうちサーバ由来の型（`Product` / `Listing` など）は `api.ts` から再エクスポートする形に切替。`ImagePriority` / `SortKey` / `ResolvedImage` は手書きのまま残す
-- CI（または `package.json` の `predev` / `pretest`）で再生成 → diff チェックを走らせ、型ドリフトを検知できるようにする
-- ADR-005 の「OpenAPI 型同期」記述からのリンクを `docs/tech/api-type-sync.md`（新設）に追加
+**実装結果**:
+- FastAPI の `/openapi.json` エンドポイントをそのまま利用（`api/main.py` のデフォルト動作）
+- `frontend/package.json` に `openapi-typescript@^7.13.0` を追加し、`npm run gen:api` で `frontend/types/api.ts` を生成（700 行超の完全な型定義）
+- `npm run check:api-types` スクリプトを整備：再生成 → `git diff --exit-code` で型ドリフトを検知（手元実行ベース）
+- `frontend/types/product.ts` のサーバ由来型（`Product` / `Listing` など）を `api.ts` からの再エクスポート形式に切替。`ImagePriority` / `SortKey` / `ResolvedImage` は手書きのまま残す。フロント 27 ファイルの型参照を更新
+- `searchClient.ts` を `ProductSearchEnvelope`（`{items, page, totalPages, totalCount, meta}`）形式に修正し、envelope 直返しに対応
+- `docs/tech/api-type-sync.md` を新設し、型同期フローとコマンドリファレンスを文書化
 
-**完了条件**: `npm run gen:api` 実行後に `git status` がクリーン。`Product` / `Listing` の手書き定義が消えても `frontend/` のビルドが通る。
+**CI**: `.github/workflows/check-api-types.yml` にて PR 時に自動ドリフト検知を実装済み。`scripts/export_openapi.py` で DB・サーバー起動なしにスキーマを書き出し、`openapi-typescript` で再生成して差分チェックを行う。
 
 ---
 
@@ -200,7 +197,7 @@
 
 - B-1. `frontend/lib/mock/searchClient.ts` の `Promise<Product[]>` 化と `app/page.tsx` の `useEffect` 化 — ✅ 完了（SWR を採用し fetch ベース化。`useEffect` ではなく SWR で扱う形に変更）
 - B-2. `lib/mock/` をテストフィクスチャ専用に再配置（本番バンドルから除外） — 撤回（`frontend/lib/mock/` は既に削除済み）
-- B-3. 検索レスポンスの envelope 形（`{items, page, totalPages, totalCount}`）とフロント `Product` 型の整合 — 未着手（T-08 / T-09 と歩調を合わせる）
+- B-3. 検索レスポンスの envelope 形（`{items, page, totalPages, totalCount}`）とフロント `Product` 型の整合 — ✅ 完了（T-09 にて `searchClient.ts` を `ProductSearchEnvelope` 形式に修正、型は `api.ts` から参照）
 - B-4. ゲスト → ログイン後の表示切り替え UX（ADR-006「影響」節）
 
 ## 依存グラフ（要約）
