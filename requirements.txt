@@ -4,6 +4,6 @@ sqlalchemy
 psycopg2-binary
 pydantic-settings
 httpx
-pyjwt
+pyjwt>=2.12.0
 bcrypt
 email-validator
