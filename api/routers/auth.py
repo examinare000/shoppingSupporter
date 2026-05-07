@@ -58,7 +58,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> User:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=EMAIL_ALREADY_REGISTERED_MESSAGE,
-        )
+        ) from None
 
 
 @router.post(
