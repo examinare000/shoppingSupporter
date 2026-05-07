@@ -29,13 +29,17 @@ async def trigger_update_prices(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    # Simple security check for Vercel Cron
-    # In production, check CRON_SECRET or similar
-    # if authorization != f"Bearer {os.getenv('CRON_SECRET')}":
-    #    raise HTTPException(status_code=401, detail="Unauthorized")
+    if authorization != f"Bearer {os.getenv('CRON_SECRET')}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     site_products = db.query(EcSiteProduct).all()
+    failed = []
     for sp in site_products:
-        await update_site_product(db, sp)
+        try:
+            await update_site_product(db, sp)
+        except Exception as exc:
+            db.rollback()
+            failed.append(str(sp.id))
+            print(f"update_site_product failed for id={sp.id}: {exc}")
 
-    return {"status": "success", "updated_count": len(site_products)}
+    return {"status": "success", "updated_count": len(site_products) - len(failed), "failed": failed}
