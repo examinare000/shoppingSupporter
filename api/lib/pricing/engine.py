@@ -46,7 +46,7 @@ class UserContext:
     is_rakuten_mobile: bool = False
     yahoo_premium: bool = False
     is_paypay_linked: bool = False
-    card_base_rate: float = 1.0  # デフォルト 1%
+    card_base_rate: float = 0.0  # カードなし時は 0%（BASE_STORE_RATE が基本還元を担う）
     card_special_rewards: Optional[Dict[str, float]] = None  # SiteType.value -> rate (%)
 
     def get_special_reward(self, site: SiteType) -> float:

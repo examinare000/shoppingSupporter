@@ -81,13 +81,13 @@ class TestBuildContext:
         assert ctx == UserContext()
 
     def test_profile_set_card_none_uses_default_card_rate(self):
-        """profile が設定されているが card=None のとき card_base_rate=1.0 になる。"""
+        """profile が設定されているが card=None のとき card_base_rate=0.0 になる。"""
         # Given
         profile = make_profile(rakuten_rank=ModelRakutenRank.REGULAR)
         # When
         ctx = build_context(profile, None)
         # Then
-        assert ctx.card_base_rate == 1.0
+        assert ctx.card_base_rate == 0.0
         assert ctx.card_special_rewards is None
 
     def test_profile_and_card_populates_context_fully(self):
@@ -189,15 +189,15 @@ _COMPUTE_CASES = [
         "amazon_guest_no_card",
         SiteType.AMAZON, 1000, 500,
         None, None,
-        # Amazon基本1%=10 + カード基本1%=10 = 20, 送料そのまま(非Prime)
-        20, 1480,
+        # Amazon基本1%=10、カードなし=0, 送料そのまま(非Prime)
+        10, 1490,
     ),
     (
         "amazon_prime_no_special_card",
         SiteType.AMAZON, 1000, 500,
         make_profile(is_amazon_prime=True), None,
-        # Amazon基本1%=10 + カード基本1%=10 = 20, 送料0(Prime)
-        20, 980,
+        # Amazon基本1%=10、カードなし=0, 送料0(Prime)
+        10, 990,
     ),
     (
         "amazon_non_prime_mastercard_1_5pct",
@@ -218,8 +218,8 @@ _COMPUTE_CASES = [
         "rakuten_regular_no_special_card",
         SiteType.RAKUTEN, 1000, 200,
         make_profile(rakuten_rank=ModelRakutenRank.REGULAR), None,
-        # ストア1%=10 + カード基本1%=10 = 20
-        20, 1180,
+        # ストア1%=10、カードなし=0
+        10, 1190,
     ),
     (
         "rakuten_regular_card_2pct_spu",
@@ -250,15 +250,15 @@ _COMPUTE_CASES = [
         "yahoo_guest_no_premium_no_paypay",
         SiteType.YAHOO, 1000, 0,
         None, None,
-        # ストア1%=10 + カード基本1%=10 = 20
-        20, 980,
+        # ストア1%=10、カードなし=0
+        10, 990,
     ),
     (
         "yahoo_lyp_premium_only",
         SiteType.YAHOO, 1000, 0,
         make_profile(yahoo_premium=True), None,
-        # ストア1%=10 + LYPプレミアム2%=20 + カード基本1%=10 = 40
-        40, 960,
+        # ストア1%=10 + LYPプレミアム2%=20 + カードなし=0 = 30
+        30, 970,
     ),
     (
         "yahoo_paypay_only",
@@ -326,9 +326,9 @@ def test_compute_pricing_regression_matches_frontend_formula(site: SiteType) -> 
     ゲスト状態 (全サイト共通) での期待値:
         price=5000, shipping=500
         ストア基本1% = floor(5000*0.01) = 50
-        カード基本1% = floor(5000*0.01) = 50
-        total_points = 100
-        effective = max(0, 5000 + 500 - 100) = 5400
+        カードなし = 0
+        total_points = 50
+        effective = max(0, 5000 + 500 - 50) = 5450
 
     Why この回帰テストが必要:
         フロントとバックが別々に effective_price を計算するため、
@@ -345,8 +345,8 @@ def test_compute_pricing_regression_matches_frontend_formula(site: SiteType) -> 
     # When: profile=None は guest 状態に相当（UserContext デフォルト）
     result = compute_pricing(price, shipping, site, profile=None, card=None)
     # Then: ハードコードした期待値で検証
-    assert result.total_points == 100
-    assert result.effective_price == 5400
+    assert result.total_points == 50
+    assert result.effective_price == 5450
 
 
 # ── compute_pricing が engine に正しくデリゲートすることの確認 ────────────────

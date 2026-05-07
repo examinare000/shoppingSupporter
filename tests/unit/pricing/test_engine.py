@@ -13,8 +13,8 @@ CASES = [
         "amazon_basic_no_special_card",
         SiteType.AMAZON, 1000, 500,
         UserContext(),
-        # 基本1%=10 + カード基本1%=10 = 20、送料そのまま
-        20, 1480, 2,
+        # 基本1%=10、カードなし=0、送料そのまま
+        10, 1490, 2,
     ),
     (
         "amazon_non_prime_mastercard_1_5pct",
@@ -34,15 +34,15 @@ CASES = [
         "amazon_prime_free_shipping_no_special_card",
         SiteType.AMAZON, 1000, 500,
         UserContext(is_amazon_prime=True),
-        # 基本1%=10 + カード基本1%=10 = 20、送料0(プライム)
-        20, 980, 2,
+        # 基本1%=10、カードなし=0、送料0(プライム)
+        10, 990, 2,
     ),
     (
         "rakuten_regular_no_card",
         SiteType.RAKUTEN, 1000, 200,
         UserContext(),
-        # ストア1%=10 + カード基本1%=10 = 20
-        20, 1180, 2,
+        # ストア1%=10、カードなし=0
+        10, 1190, 2,
     ),
     (
         "rakuten_gold_card_2pct",
@@ -66,15 +66,15 @@ CASES = [
         "yahoo_basic_no_premium_no_paypay",
         SiteType.YAHOO, 1000, 0,
         UserContext(),
-        # ストア1%=10 + カード基本1%=10 = 20
-        20, 980, 2,
+        # ストア1%=10、カードなし=0
+        10, 990, 2,
     ),
     (
         "yahoo_premium_only",
         SiteType.YAHOO, 1000, 0,
         UserContext(yahoo_premium=True),
-        # ストア1%=10 + LYPプレミアム2%=20 + カード基本1%=10 = 40
-        40, 960, 3,
+        # ストア1%=10 + LYPプレミアム2%=20 + カードなし=0 = 30
+        30, 970, 3,
     ),
     (
         "yahoo_paypay_only",
@@ -101,12 +101,11 @@ CASES = [
         "floor_truncation_non_integer_intermediate",
         SiteType.AMAZON, 999, 0,
         UserContext(),
-        # floor(999*0.01)=floor(9.99)=9 (ceil なら10)
-        # 基本1%=9 + カード基本1%=9 = 18
-        # effective = max(0, 999 + 0 - 18) = 981
+        # floor(999*0.01)=floor(9.99)=9 (ceil なら10)、カードなし=0
+        # effective = max(0, 999 + 0 - 9) = 990
         # Why: price × rate が非整数になる値を使い、math.floor() の切り捨て挙動を検証する。
-        # math.ceil() に置換すると total_points=20, effective=979 になりテストが失敗する。
-        18, 981, 2,
+        # math.ceil() に置換すると base_points=10 になりテストが失敗する。
+        9, 990, 2,
     ),
 ]
 
@@ -135,9 +134,9 @@ def test_regression_matches_frontend_effectivePrice():
     ゲスト状態 (UserContext デフォルト) での期待値:
         price=5000, shipping=500
         Amazon基本1% = floor(5000*0.01) = 50
-        カード基本1% = floor(5000*0.01) = 50
-        total_points = 100
-        effective = max(0, 5000 + 500 - 100) = 5400
+        カードなし = 0
+        total_points = 50
+        effective = max(0, 5000 + 500 - 50) = 5450
 
     Why ハードコード期待値を使う:
         `max(0, price + shipping - result.total_points)` との比較は循環アサーション
@@ -151,5 +150,5 @@ def test_regression_matches_frontend_effectivePrice():
 
     result = calculate_effective_price(SiteType.AMAZON, price, shipping, context)
 
-    assert result.total_points == 100
-    assert result.effective_price == 5400
+    assert result.total_points == 50
+    assert result.effective_price == 5450

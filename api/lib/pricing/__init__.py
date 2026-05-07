@@ -33,8 +33,8 @@ def build_context(
         is_rakuten_mobile=profile.is_rakuten_mobile,
         yahoo_premium=profile.yahoo_premium,
         is_paypay_linked=profile.is_paypay_linked,
-        card_base_rate=card.base_reward_rate if card is not None else 1.0,
-        card_special_rewards=dict(card.special_rewards) if card is not None else None,
+        card_base_rate=card.base_reward_rate if card is not None else 0.0,
+        card_special_rewards=dict(card.special_rewards) if card is not None and card.special_rewards is not None else None,
     )
 
 
