@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 from enum import Enum
 
 class SiteType(str, Enum):
@@ -34,7 +33,7 @@ class PricingResult:
     """算出結果"""
     total_points: int            # 円換算された総ポイント
     effective_price: int         # 実質価格 (price + shipping - total_points)
-    breakdown: List[RewardEntry] # 内訳
+    breakdown: list[RewardEntry] # 内訳
 
 @dataclass(frozen=True)
 class UserContext:
@@ -47,7 +46,7 @@ class UserContext:
     yahoo_premium: bool = False
     is_paypay_linked: bool = False
     card_base_rate: float = 0.0  # カードなし時は 0%（BASE_STORE_RATE が基本還元を担う）
-    card_special_rewards: Optional[Dict[str, float]] = None  # SiteType.value -> rate (%)
+    card_special_rewards: dict[str, float] | None = None  # SiteType.value -> rate (%)
 
     def get_special_reward(self, site: SiteType) -> float:
         if self.card_special_rewards is None:
