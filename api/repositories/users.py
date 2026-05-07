@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..common.models import User
@@ -31,6 +32,10 @@ def create_user(db: Session, *, email: str, hashed_password: str) -> User:
     """
     user = User(email=email, hashed_password=hashed_password)
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise
     db.refresh(user)
     return user

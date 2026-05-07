@@ -8,6 +8,7 @@ HTTP 境界を担当する。実際のパスワード検証・トークン発行
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..common.database import get_db
@@ -39,6 +40,7 @@ router = APIRouter(prefix=ROUTER_PREFIX, tags=["auth"])
     response_model=UserResponse,
     response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
+    responses={status.HTTP_409_CONFLICT: {"description": EMAIL_ALREADY_REGISTERED_MESSAGE}},
 )
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> User:
     # 先行 SELECT で重複を検出する。IntegrityError を 500 から 409 に
@@ -50,13 +52,20 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> User:
             detail=EMAIL_ALREADY_REGISTERED_MESSAGE,
         )
     hashed = hash_password(payload.password)
-    return create_user(db, email=payload.email, hashed_password=hashed)
+    try:
+        return create_user(db, email=payload.email, hashed_password=hashed)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=EMAIL_ALREADY_REGISTERED_MESSAGE,
+        )
 
 
 @router.post(
     LOGIN_PATH,
     response_model=TokenResponse,
     response_model_by_alias=True,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": INVALID_CREDENTIALS_MESSAGE}},
 )
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = get_user_by_email(db, payload.email)
@@ -76,6 +85,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     ME_PATH,
     response_model=UserResponse,
     response_model_by_alias=True,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": INVALID_CREDENTIALS_MESSAGE}},
 )
 def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
