@@ -12,7 +12,6 @@ WORKDIR /app
 # Install system dependencies needed for building/running the app
 # postgresql-dev is needed for psycopg2 (even if using -binary, it's safer)
 RUN apk add --no-cache \
-    postgresql-libs \
     libpq
 
 # --- Development stage ---
