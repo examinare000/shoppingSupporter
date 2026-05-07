@@ -72,18 +72,18 @@
 | F-09 | カードマスタ API | `GET /api/cards`（bare array / `id ASC`）/ `GET /api/cards/{id}`（404 / 422）。`special_rewards` を `{site: rate}` で構造化。初期 4 件の seed と冪等投入スクリプト | `api/routers/cards.py` / `api/common/seed/cards.py` | ✅ |
 | F-10 | API 契約のドキュメント正本 | `docs/api/{backend-spec,auth,cards}.md` を契約の出典に。OpenAPI 自動生成（T-09）までの繋ぎ | `docs/api/` | ✅ |
 | F-11 | テスト基盤 | unit + integration の 2 段。integration は testcontainers で実 Postgres を立て、`alembic upgrade head` を適用してから `app.dependency_overrides[get_db]` で注入。auth / cards / search / cron / 外部 API クライアント / security を網羅。総数 162 件 | `tests/{unit,integration}/` | ✅ |
+| F-12 | UserProfile API | 楽天ランク / Prime / LYP（yahoo_premium）/ デフォルトカードの参照・更新（`GET / PUT /api/me/profile`） | `api/routers/profile.py` / `api/repositories/user_profiles.py` | ✅ |
+| F-13 | ポイント算出純粋関数 | `api/lib/pricing/`。サイト × ランク × カード × Prime × LYP の組み合わせで還元率と実質価格を算出。テーブル駆動テストで網羅 | `api/lib/pricing/engine.py` | ✅ |
+| F-14 | 検索 API へのパーソナライズ統合 | `Depends(get_current_user_optional)` を導入し、認証ありで `Listing` に `points` / `effectivePrice` / `breakdown` を載せる。匿名でも 200 を返しフォールバック | `api/routers/products.py` | ✅ |
 
 実装済機能の API 契約は `docs/api/backend-spec.md`、フロント挙動は `docs/tech/system-design.md` を参照。
 
 ### 3.2. 進行中（Phase 1 残）
 
-`docs/plans/phase1-foundation.md` の T-05 / T-06 / T-08 / T-09 が該当。
+`docs/plans/phase1-foundation.md` の T-09 が該当。
 
 | # | 機能 | 概要 | 関連タスク |
 |---|---|---|---|
-| F-12 | UserProfile API | 楽天ランク / Prime / LYP（yahoo_premium）/ デフォルトカードの参照・更新（`GET / PUT /api/me/profile`） | T-05 |
-| F-13 | ポイント算出純粋関数 | `api/lib/pricing/`。サイト × ランク × カード × Prime × LYP の組み合わせで還元率と実質価格を算出。テーブル駆動テストで網羅 | T-06 |
-| F-14 | 検索 API へのパーソナライズ統合 | `Depends(get_current_user_optional)` を導入し、認証ありで `Listing` に `points` / `effectivePrice` / `breakdown` を載せる。匿名でも 200 を返しフォールバック | T-08 |
 | F-15 | OpenAPI → TS 型生成 | `frontend/types/api.ts` を `openapi-typescript` で生成し、CI で diff ガード | T-09 |
 
 ### 3.3. 計画中（Phase 2 以降）

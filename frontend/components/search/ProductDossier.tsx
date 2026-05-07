@@ -11,7 +11,7 @@ import { ListingRow } from './ListingRow';
  * 1 商品を 1 記事として描画する。新聞記事レイアウトを再現。
  *
  * 構成:
- *   [Ordinal]  [カテゴリ small-caps]
+ *   [Ordinal]  [タグ small-caps]
  *   [h2 商品名 ディスプレイ大]
  *   [サムネイル | 比較テーブル]
  *   [単線罫線]
@@ -19,6 +19,8 @@ import { ListingRow } from './ListingRow';
  *
  * 並び順: 実質価格昇順固定（このコンポーネントは「記事内のテーブル」であり、
  * セクション全体のソートとは別概念。記事内では常に「最安が上」が読者にとって自然）。
+ *
+ * T-09 以降: product.category は ProductSummary に存在しないため product.tags[0] で代替する。
  */
 interface ProductDossierProps {
   product: Product;
@@ -27,7 +29,8 @@ interface ProductDossierProps {
 }
 
 export function ProductDossier({ product, index, priority }: ProductDossierProps) {
-  const sorted = sortListings(product.listings, 'effectivePriceAsc');
+  const listings = product.listings ?? [];
+  const sorted = sortListings(listings, 'effectivePriceAsc');
   // 最安価格を計算しておき、ListingRow に isCheapest を渡す
   // （ソート済み配列の先頭が最安だが、価格同値の場合に複数行を朱色化したいので effectivePrice 比較で判定する）
   const cheapestPrice =
@@ -38,7 +41,7 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
       <header className="flex items-baseline gap-3 mb-2">
         <Ordinal n={index + 1} />
         <span className="font-mono text-xs small-caps text-ink-muted">
-          {product.category}
+          {product.tags[0] ?? ''}
         </span>
       </header>
 
@@ -57,12 +60,6 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
                 Site
               </th>
               <th className="font-mono text-xs small-caps text-ink-muted py-1 px-2 text-right">
-                本体
-              </th>
-              <th className="font-mono text-xs small-caps text-ink-muted py-1 px-2 text-right">
-                送料
-              </th>
-              <th className="font-mono text-xs small-caps text-ink-muted py-1 px-2 text-right">
                 ポイント
               </th>
               <th className="font-mono text-xs small-caps text-ink-muted py-1 px-2 text-right">
@@ -76,7 +73,7 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
           <tbody>
             {sorted.map((listing) => (
               <ListingRow
-                key={listing.site}
+                key={listing.siteType}
                 listing={listing}
                 isCheapest={calculateEffectivePrice(listing) === cheapestPrice}
               />

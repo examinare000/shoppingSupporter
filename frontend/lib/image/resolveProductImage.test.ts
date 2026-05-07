@@ -1,97 +1,96 @@
 import { describe, it, expect } from 'vitest';
 import { resolveProductImage } from '@/lib/image/resolveProductImage';
 import { DEFAULT_IMAGE_PRIORITY } from '@/lib/image/imagePriorityDefaults';
-import type { ImagePriority, Listing, Product, SiteType } from '@/types/product';
+import type { ImagePriority, Listing, Product } from '@/types/product';
 
-const makeListing = (site: SiteType, imageUrl?: string): Listing => ({
-  site,
-  siteProductId: `${site}-id`,
-  url: `https://example.com/${site}`,
-  price: 1000,
-  shippingFee: 0,
+/**
+ * resolveProductImage のテスト仕様（T-09 以降）
+ *
+ * 旧実装: ImagePriority の順に product.listings を走査し、最初に見つかった
+ *         Listing.imageUrl を返す（per-listing 画像フォールバック）。
+ *
+ * 新実装: ProductSummary は imageUrl をプロダクトレベルで 1 件持つのみ。
+ *         listings に imageUrl フィールドが存在しないため、product.imageUrl を直接返す。
+ *         画像出典情報が API から提供されないため from は priority[0] を使用する。
+ *
+ * テスト対象の観点（plan.md §実装ガイドライン より）:
+ *   1. product.imageUrl が null のとき null を返す
+ *   2. product.imageUrl が文字列のとき { url, from: priority[0] } を返す
+ *   3. priority[0] が変わると from が変わる
+ *   4. product.listings の内容に関わらず product.imageUrl が参照される
+ *   5. 空文字列は null 同様に扱う
+ */
+
+const baseListing: Listing = {
+  siteType: 'amazon',
+  siteProductId: 'A',
+  url: 'https://example.com/a',
   points: 0,
-  pointRate: 0,
-  imageUrl,
-  inStock: true,
-});
+  effectivePrice: 1000,
+  breakdown: null,
+};
 
-const makeProduct = (listings: Listing[]): Product => ({
+const makeProduct = (imageUrl: string | null): Product => ({
   id: 'p1',
   name: 'テスト商品',
-  category: 'test',
-  listings,
+  description: null,
+  imageUrl,
+  tags: [],
+  inStock: true,
+  currentPrice: null,
+  listings: [],
 });
 
 describe('resolveProductImage', () => {
-  it('全 Listing に画像があればデフォルト優先度で Amazon を返す', () => {
-    const product = makeProduct([
-      makeListing('amazon', 'https://img/amazon.jpg'),
-      makeListing('rakuten', 'https://img/rakuten.jpg'),
-      makeListing('yahoo', 'https://img/yahoo.jpg'),
-    ]);
+  it('product.imageUrl が文字列のとき { url, from: priority[0] } を返す', () => {
+    // Given: product レベルに画像がある
+    const product = makeProduct('https://img/test.jpg');
+    // When: デフォルト優先度 (amazon, rakuten, yahoo) を渡す
     const result = resolveProductImage(product, DEFAULT_IMAGE_PRIORITY);
-    expect(result).toEqual({ url: 'https://img/amazon.jpg', from: 'amazon' });
+    // Then: url は product.imageUrl、from は priority[0] = 'amazon'
+    expect(result).toEqual({ url: 'https://img/test.jpg', from: 'amazon' });
   });
 
-  it('Amazon に画像が無い場合は Rakuten にフォールバックする', () => {
-    const product = makeProduct([
-      makeListing('amazon', undefined),
-      makeListing('rakuten', 'https://img/rakuten.jpg'),
-      makeListing('yahoo', 'https://img/yahoo.jpg'),
-    ]);
-    const result = resolveProductImage(product, DEFAULT_IMAGE_PRIORITY);
-    expect(result).toEqual({ url: 'https://img/rakuten.jpg', from: 'rakuten' });
-  });
-
-  it('Amazon・Rakuten 両方欠落で Yahoo にフォールバックする', () => {
-    const product = makeProduct([
-      makeListing('amazon', undefined),
-      makeListing('rakuten', undefined),
-      makeListing('yahoo', 'https://img/yahoo.jpg'),
-    ]);
-    const result = resolveProductImage(product, DEFAULT_IMAGE_PRIORITY);
-    expect(result).toEqual({ url: 'https://img/yahoo.jpg', from: 'yahoo' });
-  });
-
-  it('全 Listing で画像が欠落していれば null を返す', () => {
-    const product = makeProduct([
-      makeListing('amazon', undefined),
-      makeListing('rakuten', undefined),
-      makeListing('yahoo', undefined),
-    ]);
+  it('product.imageUrl が null のとき null を返す', () => {
+    const product = makeProduct(null);
     expect(resolveProductImage(product, DEFAULT_IMAGE_PRIORITY)).toBeNull();
   });
 
-  it('カスタム優先度では Yahoo を最優先で返せる', () => {
+  it('product.imageUrl が空文字列のとき null を返す（空文字も「画像なし」として扱う）', () => {
+    const product = makeProduct('');
+    expect(resolveProductImage(product, DEFAULT_IMAGE_PRIORITY)).toBeNull();
+  });
+
+  it('priority[0] が変わると from が変わる', () => {
+    // Given: Yahoo を最優先にした priority
     const priority: ImagePriority = ['yahoo', 'amazon', 'rakuten'];
-    const product = makeProduct([
-      makeListing('amazon', 'https://img/amazon.jpg'),
-      makeListing('rakuten', 'https://img/rakuten.jpg'),
-      makeListing('yahoo', 'https://img/yahoo.jpg'),
-    ]);
+    const product = makeProduct('https://img/test.jpg');
     const result = resolveProductImage(product, priority);
-    expect(result).toEqual({ url: 'https://img/yahoo.jpg', from: 'yahoo' });
+    // Then: from = priority[0] = 'yahoo'
+    expect(result).toEqual({ url: 'https://img/test.jpg', from: 'yahoo' });
   });
 
-  it('listings が空配列なら null を返す', () => {
-    const product = makeProduct([]);
-    expect(resolveProductImage(product, DEFAULT_IMAGE_PRIORITY)).toBeNull();
-  });
-
-  it('優先サイトに該当する Listing が存在しなければ次の候補に進む', () => {
-    // Amazon と Rakuten の Listing 自体が無く、Yahoo のみ
-    const product = makeProduct([makeListing('yahoo', 'https://img/yahoo.jpg')]);
+  it('product.listings の内容に関わらず product.imageUrl が参照される', () => {
+    // Why: ListingOut に imageUrl フィールドが存在しないため
+    //      listings の中身を見ず product.imageUrl だけを使う実装を保証する
+    const product: Product = {
+      id: 'p1',
+      name: 'テスト商品',
+      description: null,
+      imageUrl: 'https://img/product-level.jpg',
+      tags: [],
+      inStock: true,
+      currentPrice: null,
+      listings: [baseListing],
+    };
     const result = resolveProductImage(product, DEFAULT_IMAGE_PRIORITY);
-    expect(result).toEqual({ url: 'https://img/yahoo.jpg', from: 'yahoo' });
+    expect(result).toEqual({ url: 'https://img/product-level.jpg', from: 'amazon' });
   });
 
-  it('imageUrl が空文字列の場合は欠落とみなし次の候補に進む', () => {
-    const product = makeProduct([
-      makeListing('amazon', ''),
-      makeListing('rakuten', 'https://img/rakuten.jpg'),
-      makeListing('yahoo', 'https://img/yahoo.jpg'),
-    ]);
+  it('listings が空配列でも product.imageUrl があれば返す', () => {
+    const product = makeProduct('https://img/test.jpg');
+    // listings: [] （makeProduct のデフォルト）
     const result = resolveProductImage(product, DEFAULT_IMAGE_PRIORITY);
-    expect(result).toEqual({ url: 'https://img/rakuten.jpg', from: 'rakuten' });
+    expect(result).toEqual({ url: 'https://img/test.jpg', from: 'amazon' });
   });
 });
