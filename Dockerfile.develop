@@ -4,7 +4,7 @@ FROM python:3.11-alpine AS base
 # Prevent Python from writing .pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=off \
+    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on
 
 WORKDIR /app
@@ -50,7 +50,6 @@ RUN apk add --no-cache --virtual .build-deps \
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-WORKDIR /app
 COPY --chown=appuser:appgroup . .
 
 USER appuser
