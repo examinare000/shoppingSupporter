@@ -137,7 +137,6 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
     await user.type(screen.getByRole('searchbox'), 'イヤホン');
     await user.click(screen.getByRole('button', { name: /検索する/ }));
 
-    // Hits は envelope.items.length で表示される（envelope 全体の件数でない）
     expect(await screen.findByText(/Hits 1 件/)).toBeInTheDocument();
     expect(screen.getByText(/"イヤホン"/)).toBeInTheDocument();
 
