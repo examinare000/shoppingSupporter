@@ -106,7 +106,7 @@ def _extract_bearer_token(authorization: str | None) -> str:
     if not authorization:
         raise _unauthorized()
     scheme, _, token = authorization.partition(" ")
-    if scheme != BEARER_SCHEME or not token:
+    if scheme.strip().lower() != BEARER_SCHEME.lower() or not token:
         raise _unauthorized()
     return token
 
