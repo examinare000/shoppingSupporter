@@ -22,6 +22,7 @@ import { EmptyState } from './EmptyState';
 interface SearchResultsSectionProps {
   query: string;
   products: Product[];
+  totalCount: number;
   priority: ImagePriority;
   onMoveUp: (site: SiteType) => void;
   onMoveDown: (site: SiteType) => void;
@@ -62,6 +63,7 @@ function sortProducts(products: Product[], key: SortKey): Product[] {
 export function SearchResultsSection({
   query,
   products,
+  totalCount,
   priority,
   onMoveUp,
   onMoveDown,
@@ -83,7 +85,7 @@ export function SearchResultsSection({
     <section className="px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <p className="font-mono text-xs small-caps text-ink-muted">
-          Hits {products.length} 件 / Query &quot;{query}&quot;
+          Hits {totalCount} 件 / Query &quot;{query}&quot;
         </p>
         <SortControl value={sortKey} onChange={setSortKey} />
       </div>

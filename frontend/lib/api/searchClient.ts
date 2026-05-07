@@ -1,6 +1,13 @@
 import type { Product } from '@/types/product';
 import { buildProductsSearchUrl } from '@/lib/api/endpoints';
 
+export interface ProductSearchEnvelope {
+  items: Product[];
+  page: number;
+  totalPages: number;
+  totalCount: number;
+}
+
 /**
  * 商品検索 API クライアント。
  *
@@ -10,10 +17,10 @@ import { buildProductsSearchUrl } from '@/lib/api/endpoints';
  *   try/catch で握りつぶさないことで SWR にエラーを伝え、画面側でリトライ UI を出せるようにする
  *   （Fail Fast / 横断的関心事を API クライアント層に閉じ込める）。
  * - URL 組み立ては `buildProductsSearchUrl` に委譲する。検索パスやクエリパラメータ名の散在を防ぐ。
- * - レスポンス body は `Product[]` 直返しを前提とする。型ガードを挟まないのは、サーバー応答信頼の前提
- *   （バックエンドは OpenAPI で型同期する設計。ADR-005 §5）。
+ * - レスポンス body は envelope 形式（items / totalCount 等）。totalCount はページをまたいだ
+ *   総件数を表し、items.length（現ページ件数）とは異なる（ADR-005 §5）。
  */
-export async function searchProducts(query: string): Promise<Product[]> {
+export async function searchProducts(query: string): Promise<ProductSearchEnvelope> {
   const response = await fetch(buildProductsSearchUrl(query), { method: 'GET' });
 
   if (!response.ok) {
@@ -23,5 +30,5 @@ export async function searchProducts(query: string): Promise<Product[]> {
     );
   }
 
-  return (await response.json()) as Product[];
+  return (await response.json()) as ProductSearchEnvelope;
 }

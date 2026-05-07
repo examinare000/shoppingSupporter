@@ -102,6 +102,7 @@ describe('SearchResultsSection', () => {
       <SearchResultsSection
         query="abc"
         products={[productA, productB]}
+        totalCount={2}
         priority={PRIORITY}
         {...noopHandlers}
       />,
@@ -115,6 +116,7 @@ describe('SearchResultsSection', () => {
       <SearchResultsSection
         query="zzz"
         products={[]}
+        totalCount={0}
         priority={PRIORITY}
         {...noopHandlers}
       />,
@@ -128,6 +130,7 @@ describe('SearchResultsSection', () => {
       <SearchResultsSection
         query="x"
         products={[productA, productB]}
+        totalCount={2}
         priority={PRIORITY}
         {...noopHandlers}
       />,
@@ -155,6 +158,7 @@ describe('SearchResultsSection', () => {
       <SearchResultsSection
         query="x"
         products={[productA]}
+        totalCount={1}
         priority={['rakuten', 'amazon', 'yahoo']}
         onMoveUp={onMoveUp}
         onMoveDown={onMoveDown}

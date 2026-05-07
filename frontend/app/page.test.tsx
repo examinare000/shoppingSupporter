@@ -113,7 +113,9 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
   });
 
   it('検索 → 成功時: ヒット件数表示と該当商品の article が描画される', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([productEarbuds]));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ items: [productEarbuds], page: 1, totalPages: 1, totalCount: 1 }),
+    );
     const user = userEvent.setup();
     renderHome();
 
@@ -154,7 +156,9 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
   it('リトライボタン押下で再 fetch され、2 回目の成功で結果が描画される', async () => {
     fetchMock
       .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValueOnce(jsonResponse([productEarbuds]));
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [productEarbuds], page: 1, totalPages: 5, totalCount: 5 }),
+      );
 
     const user = userEvent.setup();
     renderHome();
@@ -165,8 +169,8 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
     const retryBtn = await screen.findByRole('button', { name: /リトライ/ });
     await user.click(retryBtn);
 
-    // 2 回目の応答が反映され、結果セクションが描画される
-    expect(await screen.findByText(/Hits 1 件/)).toBeInTheDocument();
+    // 2 回目の応答が反映され、結果セクションが描画される（totalCount=5, 現ページ 1 件）
+    expect(await screen.findByText(/Hits 5 件/)).toBeInTheDocument();
     expect(screen.getAllByRole('article')).toHaveLength(1);
     // 1 回目（失敗） + リトライ（成功） = 計 2 回 fetch されている
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -177,7 +181,9 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
   });
 
   it('検索 → ヒット 0 件: SearchResultsSection 内の EmptyState（該当記事はありません）が描画される', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ items: [], page: 1, totalPages: 0, totalCount: 0 }),
+    );
     const user = userEvent.setup();
     renderHome();
 
