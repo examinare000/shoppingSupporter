@@ -6,8 +6,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/shoppingsupporter
-      - JWT_SECRET=dev-secret-key-change-me-in-production
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:password@db:5432/shoppingsupporter}
+      - JWT_SECRET=${JWT_SECRET}
     env_file:
       - .env
     volumes:
@@ -40,7 +40,7 @@ services:
       context: .
       target: development
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/shoppingsupporter
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:password@db:5432/shoppingsupporter}
     volumes:
       - .:/app
     depends_on:
