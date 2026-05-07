@@ -51,7 +51,14 @@
   ],
   "page": 1,
   "totalPages": 3,
-  "totalCount": 25
+  "totalCount": 25,
+  "meta": {
+    "personalization": {
+      "applied": false,
+      "rakutenRank": null,
+      "hasCard": false
+    }
+  }
 }
 ```
 
