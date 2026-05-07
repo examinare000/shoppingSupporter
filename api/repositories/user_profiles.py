@@ -15,8 +15,10 @@ Why この層を持つか:
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Optional
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
 from ..common.models import Card, UserProfile, RakutenRank
@@ -78,29 +80,29 @@ def upsert_profile(
         `is_paypay_linked` を追加してもパラメータスワップが起きないよう、
         keyword-only を継続する。
     """
-    existing = (
-        db.query(UserProfile)
-        .filter(UserProfile.user_id == user_id)
-        .one_or_none()
+    now = datetime.utcnow()
+    stmt = pg_insert(UserProfile).values(
+        user_id=user_id,
+        rakuten_rank=rakuten_rank,
+        is_amazon_prime=is_amazon_prime,
+        yahoo_premium=yahoo_premium,
+        is_rakuten_mobile=is_rakuten_mobile,
+        is_paypay_linked=is_paypay_linked,
+        default_card_id=default_card_id,
+        updated_at=now,
+    ).on_conflict_do_update(
+        index_elements=["user_id"],
+        set_={
+            "rakuten_rank": rakuten_rank,
+            "is_amazon_prime": is_amazon_prime,
+            "yahoo_premium": yahoo_premium,
+            "is_rakuten_mobile": is_rakuten_mobile,
+            "is_paypay_linked": is_paypay_linked,
+            "default_card_id": default_card_id,
+            "updated_at": now,
+        },
     )
-    if existing is None:
-        existing = UserProfile(
-            user_id=user_id,
-            rakuten_rank=rakuten_rank,
-            is_amazon_prime=is_amazon_prime,
-            yahoo_premium=yahoo_premium,
-            is_rakuten_mobile=is_rakuten_mobile,
-            is_paypay_linked=is_paypay_linked,
-            default_card_id=default_card_id,
-        )
-        db.add(existing)
-    else:
-        existing.rakuten_rank = rakuten_rank
-        existing.is_amazon_prime = is_amazon_prime
-        existing.yahoo_premium = yahoo_premium
-        existing.is_rakuten_mobile = is_rakuten_mobile
-        existing.is_paypay_linked = is_paypay_linked
-        existing.default_card_id = default_card_id
+    db.execute(stmt)
     db.commit()
 
     # commit 後に joinedload 付きで再取得する。`db.refresh(existing)` だけでは
