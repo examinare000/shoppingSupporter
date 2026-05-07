@@ -64,6 +64,7 @@ def _default_response() -> UserProfileResponse:
     "",
     response_model=UserProfileResponse,
     response_model_by_alias=True,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Missing or invalid JWT"}},
 )
 def get_profile(
     current_user: User = Depends(get_current_user),
@@ -84,6 +85,10 @@ def get_profile(
     "",
     response_model=UserProfileResponse,
     response_model_by_alias=True,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"description": "Missing or invalid JWT"},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": DEFAULT_CARD_NOT_FOUND_MESSAGE},
+    },
 )
 def update_profile(
     # Why `payload` を受けるが `Depends(get_current_user)` を使わない:
