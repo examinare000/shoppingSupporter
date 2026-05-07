@@ -1,6 +1,6 @@
 # バックエンド API 仕様
 
-最終更新: 2026-05-04（ADR-009 統合反映）
+最終更新: 2026-05-06（T-05 UserProfile API 実装反映）
 
 実装は `api/main.py`（FastAPI）配下。ルートは `vercel.json` のリライトで `/api/(.*) → /api/main.py` に集約され、FastAPI 内部でパスマッチする。
 
@@ -8,7 +8,7 @@
 
 - **Base URL**: `/api`
 - **形式**: JSON（フィールド名は camelCase）
-- **認証**: 検索系は当面公開エンドポイント。ユーザー文脈付きの API は `Authorization: Bearer <JWT>`（ADR-007）。
+- **認証**: 検索系・Card マスタは公開エンドポイント。ユーザー文脈付きの API は `Authorization: Bearer <JWT>`（ADR-007）。JWT の発行は `/api/auth/login`（§2.6）。
 
 ## 2. 実装済みエンドポイント
 
@@ -51,7 +51,14 @@
   ],
   "page": 1,
   "totalPages": 3,
-  "totalCount": 25
+  "totalCount": 25,
+  "meta": {
+    "personalization": {
+      "applied": false,
+      "rakutenRank": null,
+      "hasCard": false
+    }
+  }
 }
 ```
 
@@ -75,6 +82,10 @@
 - 価格範囲のクロスフィールド検証はハンドラ側（`_validate_price_range`）。pydantic Query では表現できないため。
 - 操作ログには `q_len` / `hits` / `elapsed_ms` のみを残し、生の `q` は出力しない（ユーザー入力をログに混ぜない方針）。
 
+**型整合（T-09 にて解消済み）:**
+
+`frontend/lib/api/searchClient.ts` を `ProductSearchEnvelope`（`{items, page, totalPages, totalCount, meta}`）形式に修正済み。`frontend/types/api.ts` は OpenAPI スキーマから自動生成されており、フロントの型定義は常にバックエンドの返却形と一致する。
+
 ### 2.3. 商品全件取得（暫定）
 `GET /api/products`
 
@@ -85,14 +96,53 @@
 
 Vercel Cron Jobs が 1 時間ごとに叩く（`vercel.json` の `0 * * * *`）。各 `EcSiteProduct` について Amazon / 楽天 / Yahoo の公式 API を呼び、`PriceHistory` を追記する。
 
-## 3. 未実装（Phase 1 で着手予定）
+### 2.5. Card マスタ
+`GET /api/cards` / `GET /api/cards/{id}`
 
-詳細は `docs/plans/phase1-foundation.md` を参照。
+実装: `api/routers/cards.py`。仕様の正本は `docs/api/cards.md`（`special_rewards` の構造、初期 5 件のシード内容、投入手順を集約）。
 
-- `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me`（T-03）
-- `GET /api/cards` / `GET /api/cards/{id}`（T-04）
-- `GET /api/me/profile` / `PUT /api/me/profile`（T-05）
-- 検索結果へのユーザー個別実質価格の同梱（T-08）
+公開エンドポイント（認証不要）。書き込み系（POST/PUT/DELETE）は Phase 1 では実装せず、行の投入は `python -m api.common.seed.cards` で行う。
+
+**Response 概要:**
+
+- 一覧は bare array（envelope ではない）。並び順は `id ASC` 固定
+- 詳細は単一オブジェクト。存在しない `id` で `404`、非整数 `id` で `422`
+- フィールド: `id` / `name` / `baseRewardRate` / `annualFee` / `specialRewards`
+
+### 2.6. 認証
+`POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me`
+
+実装: `api/routers/auth.py`（HTTP 境界）、`api/common/security.py`（bcrypt / JWT / `Depends(get_current_user)` の集約）、`api/repositories/users.py`（永続化）。仕様の正本は `docs/api/auth.md`。
+
+ADR-007 の決定どおり、ステートレスな JWT（HS256 / `JWT_SECRET` 署名）を発行し、以降の認証必須エンドポイントは `Authorization: Bearer <token>` で受け付ける。トークン失効は今は実装せず、有効期限（60 分）に依る。
+
+**Response 概要:**
+
+- `signup` は `201 Created` で `UserResponse`（`id` / `email` / `createdAt`）。`hashedPassword` は返さない
+- `login` は `200` で `TokenResponse`（`accessToken` / `tokenType="bearer"`）
+- `/me` は `200` で `UserResponse`。`Authorization: Bearer <token>` 必須
+- `signup` の email 重複は `409`（状態競合の意味的表現として `IntegrityError` 救済より優先）
+- `login` 失敗（未登録 email / パスワード違い）と `/me` の認証失敗は **すべて同一の 401 + 共通メッセージ**。ユーザー存在有無の漏洩を避けるため意図的に区別しない
+- リクエストボディは `extra="forbid"`。`accessToken` 等のレスポンス envelope を body に流用すると `422`
+
+### 2.7. UserProfile
+`GET /api/me/profile` / `PUT /api/me/profile`
+
+実装: `api/routers/profile.py`（HTTP 境界）、`api/repositories/user_profiles.py`（永続化、`joinedload` で `default_card` を eager load）、`api/schemas.py`（`UserProfileUpdate` / `UserProfileResponse`）。仕様の正本は `docs/api/profile.md`。
+
+認証必須（`Authorization: Bearer <token>`）。GET は未保存ユーザーに対して 200 + デフォルト値 + `updatedAt: null` を返し、DB レコードは作成しない（GET の冪等性）。PUT は全フィールド必須の全置換で、`defaultCardId: null` を「カード未設定への戻し」として受理する。
+
+**Response 概要:**
+
+- レスポンスは camelCase（`rakutenRank` / `isAmazonPrime` / `isRakutenMobile` / `yahooPremium` / `isPayPayLinked` / `defaultCardId` / `defaultCard` / `updatedAt`）
+- `defaultCard` は `CardResponse` 形を nested 同梱
+- リクエストボディは `extra="forbid"`。GET レスポンス形（`updatedAt` / `defaultCard`）や `accessToken` 等の envelope 流用は 422
+- バリデーション順序は (1) Pydantic（型・Enum・`extra="forbid"` / bool `strict=True`）→ (2) 認証 401 →(3) `card_exists` 422。順序を固定するためハンドラは `Depends(get_current_user)` を使わず `Header` 経由で受けて body 検証通過後に呼ぶ
+- `defaultCardId` が存在しないカードを参照した場合は 422（FK IntegrityError 経由ではなく事前 SELECT）
+
+## 3. Phase 1 完了
+
+Phase 1 の全タスク（T-01〜T-09）は実装済み。
 
 ## 4. 共通エラーレスポンス
 
@@ -106,4 +156,4 @@ Vercel Cron Jobs が 1 時間ごとに叩く（`vercel.json` の `0 * * * *`）�
 
 ## 5. 型同期（Phase 1 完了後）
 
-ADR-005 の方針どおり、Phase 1 終了時点で `api/main.py` の OpenAPI スキーマから `frontend/types/api.ts` を生成する CI を組む（T-09）。それ以前は本仕様書を正本とし、フロントの手書き型と整合させる。
+T-09 にて実装済み。`api/main.py` の FastAPI が公開する `/openapi.json` から `openapi-typescript` で `frontend/types/api.ts` を自動生成している。型同期の手順は `docs/tech/api-type-sync.md` を参照。PR 時の自動ドリフト検知は `.github/workflows/check-api-types.yml` で実装済み。

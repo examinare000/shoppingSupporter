@@ -1,12 +1,12 @@
 # Phase 1 実装計画: 基盤整備と UserProfile 連携
 
-最終更新日: 2026-05-04（ADR-009 / T-01・T-02・T-07 完了反映）
+最終更新日: 2026-05-06（T-05, T-06 完了反映）
 
 ## 位置づけ
 
 本計画は ADR-006「高度な機能（還元率反映・履歴・予測）のロードマップ」のフェーズ 1（基盤整備と UserProfile 連携 / Backend First）を、ブランチ単位で着手可能なタスクゴールへ分解したもの。ADR-005「モック駆動フロントから実バックエンドへの移行戦略」で示された制約（DB 主導検索 / OpenAPI 型同期 / 実質価格計算はバックエンド主導）を前提とする。
 
-**目的**: バックエンドで「ユーザー文脈付きの実質価格」を算出して返す土台を組み、フロントが Phase 2 以降で `searchClient` を `fetch` 版へ差し替えるための足場を完成させる。
+**目的**: バックエンドで「ユーザー文脈付きの実質価格」を算出して返す土台を組み、フロントが SWR + fetch ベースの `searchClient` で安定して結果を描画できる状態を維持する（B-1 は当初プランの `useEffect` 化ではなく fetch + SWR で代替する形で完了済み）。
 
 ## スコープ
 
@@ -34,19 +34,17 @@
 
 ## タスクゴール一覧
 
-各タスクは 1 ブランチ = 1 目的の単位（`agent-rules/10-git-strategy.md`）。並列着手可否と依存は「依存」欄を参照。状態欄は 2026-05-04 時点。
-
 | ID | タスクゴール | 状態 | 依存 | 並列可 |
 |----|--------------|------|------|--------|
-| T-01 | Alembic 導入と初期マイグレーション | ✅ 完了（0001 初期 + 0002 検索カラム） | なし | ○ |
-| T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了（unit + integration / testcontainers Postgres） | なし | ○ |
-| T-03 | JWT 最小認証の実装 | ⏳ 未着手 | T-01, T-02 | × |
-| T-04 | `Card` マスタ API と初期シード | ⏳ 未着手 | T-01, T-02 | T-05 と並列可 |
-| T-05 | `UserProfile` API（参照・更新） | ⏳ 未着手 | T-03 | T-04 と並列可 |
-| T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ⏳ 未着手 | T-02 | T-04, T-05 と並列可 |
-| T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了（FTS+trigram で当初予定よりリッチ。`/api/products/search`） | T-01, T-02 | T-06 と並列可 |
-| T-08 | 検索 API への UserProfile / Card 統合 | ⏳ 未着手 | T-05, T-06, T-07 | × |
-| T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | ⏳ 未着手 | T-04〜T-08 のうち API 形が確定したもの | × |
+| T-01 | Alembic 導入と初期マイグレーション | ✅ 完了 | なし | ○ |
+| T-02 | API テスト基盤（pytest + テスト用 DB）整備 | ✅ 完了 | なし | ○ |
+| T-03 | JWT 最小認証の実装 | ✅ 完了 | T-01, T-02 | × |
+| T-04 | `Card` マスタ API と初期シード | ✅ 完了 | T-01, T-02 | T-05 と並列可 |
+| T-05 | `UserProfile` API（参照・更新） | ✅ 完了 | T-03 | T-04 と並列可 |
+| T-06 | サイト別ポイント算出ロジックの純粋関数モジュール化 | ✅ 完了 | T-02 | T-04, T-05 と並列可 |
+| T-07 | DB 主導の商品検索 API（匿名向け最小版） | ✅ 完了 | T-01, T-02 | T-06 と並列可 |
+| T-08 | 検索 API への UserProfile / Card 統合 | ✅ 完了 | T-05, T-06, T-07 | × |
+| T-09 | OpenAPI スキーマ公開と TypeScript 型生成パイプライン | ✅ 完了 | T-04〜T-08 のうち API 形が確定したもの | × |
 
 ---
 
@@ -70,75 +68,81 @@
 **なぜ**: 現状バックエンドにテストが存在せず、TDD（`agent-rules/11-testing-strategy.md`）を成立させられない。Phase 1 の検算系ロジックは TDD で進める前提のため、最初に枠を作る。
 
 **実装結果**:
-- `pytest`, `pytest-asyncio`, `httpx`, `testcontainers` を `requirements-dev.txt` に追加。
-- `tests/unit/` — 外部 API クライアント（Amazon PA-API 署名 / レスポンス処理）の単体テスト 48 件。
-- `tests/integration/` — `update_prices` × `AmazonAPI` の結合 5 件と、`/api/products/search` 全 52 件（リポジトリ unit + エンドポイント integration）。
-- `tests/integration/conftest.py` で testcontainers Postgres + Alembic 適用 + `app.dependency_overrides[get_db]` を提供。
-- 当初予定していた SQLite in-memory 戦略は破棄（T-07 で FTS / pg_trgm / ARRAY を使うため Postgres 互換が必須になった）。
+- `pytest`, `pytest-asyncio`, `httpx`, `testcontainers` を `requirements-dev.txt` に追加.
+- `tests/unit/` — 外部 API クライアント（Amazon PA-API 署名 / レスポンス処理）の単体テスト 48 件.
+- `tests/integration/` — `update_prices` × `AmazonAPI` の結合 5 件と、`/api/products/search` 全 52 件（リポジトリ unit + エンドポイント integration）.
+- `tests/integration/conftest.py` で testcontainers Postgres + Alembic 適用 + `app.dependency_overrides[get_db]` を提供.
+- 当初予定していた SQLite in-memory 戦略は破棄（T-07 で FTS / pg_trgm / ARRAY を使うため Postgres 互換が必須になった）.
 
-**完了条件**: 全 105 件の `pytest -q` が緑（integration は Docker 必須）。
+**完了条件**: 全 105 件の `pytest -q` が緑（integration は Docker 必須）.
 
 ---
 
-### T-03. JWT 最小認証の実装
+### T-03. JWT 最小認証の実装 ✅
 
 **なぜ**: `UserProfile` をユーザーに紐付けて返すには、リクエスト主体の特定が必要。ADR-007 で決定した JWT 方式を実装する。
 
-**やること**:
-1. **エンドポイント実装**:
-   - `POST /api/auth/signup` — メアド + パスワード（bcrypt ハッシュ化）
-   - `POST /api/auth/login` — 認証成功で JWT を返す
-   - `GET /api/auth/me` — 認証ユーザー情報の確認
-   - `Depends(get_current_user)` を `api/common/security.py` に切り出す
-2. **シークレット管理**: `JWT_SECRET` を環境変数で受ける。`.env.example` を追加（`agent-rules/12-security-guidelines.md` 準拠でハードコード禁止）。
+**実装結果**:
+- `api/routers/auth.py` を新設し `POST /api/auth/signup` / `POST /api/auth/login` / `GET /api/auth/me` を実装。`api/main.py` で include。
+- `api/common/security.py` に bcrypt（`hash_password` / `verify_password`）と JWT（HS256 / 60 分有効期限の `create_access_token` / `decode_access_token`）、および `Depends(get_current_user)` を集約。`bcrypt` / `pyjwt` の import は this 1 module に閉じる。
+- `api/repositories/users.py` で `get_user_by_email` / `get_user_by_id` / `create_user` を実装。ルーターは ORM を直接触らない。
+- `api/schemas.py` に `SignupRequest` / `LoginRequest` / `TokenResponse` / `UserResponse` を追加。レスポンスは camelCase（`accessToken` / `tokenType` / `createdAt`）、`response_model_by_alias=True` で配信。`SignupRequest` / `LoginRequest` は `extra="forbid"` で envelope 形（`accessToken` 等）の流用を 422 で弾く。
+- 401 の正規化: `get_current_user` 経由の失敗（ヘッダ欠落・スキーム違い・改ざん・期限切れ・sub 不正・ユーザー不在）はすべて `INVALID_CREDENTIALS_MESSAGE` の 401 に集約。login も未登録 email とパスワード違いを区別せず同一 401 を返す（ユーザー存在有無の漏洩防止）。
+- 重複 email は signup 側で先行 SELECT して 409（IntegrityError 救済より状態競合の意味的表現を優先）。
+- `JWT_SECRET` は `_get_jwt_secret()` で遅延参照（モジュール import 時に raise しないことで conftest の `setdefault` 注入順序と両立）。空文字も「未設定」として `RuntimeError`。
+- 依存追加: `pyjwt` / `bcrypt` / `email-validator` を `requirements.txt` に追加。
+- 仕様の正本: `docs/api/auth.md`（contract と 401 共通化の意図、テスト観点を集約）。`docs/api/backend-spec.md` §2.6 に Auth 節を追加。
+- TDD: `tests/unit/test_security.py` 13 件（hash 往復 / JWT round-trip / tampered / expired / fail-fast）と `tests/integration/test_auth.py` 27 件（signup→login→/me の HTTP 契約 / 重複 409 / 401 共通化 / camelCase）。全 162 件の `pytest -q` 緑。
 
 **完了条件**: signup → login → /me のテストが緑。誤パスワード時 401、未認証 /me で 401。
 
 ---
 
-### T-04. `Card` マスタ API と初期シード
+### T-04. `Card` マスタ API と初期シード ✅
 
 **なぜ**: `UserProfile.default_card_id` は `cards.id` を参照する FK のため、Card 行が無いと Profile を完成させられない。Phase 1 のポイント加算ロジックも Card の `special_rewards` を読む。
 
-**やること**:
-- `GET /api/cards`（一覧）と `GET /api/cards/{id}`（詳細）を実装。書き込み系は管理者専用に限定し、Phase 1 では起票のみ（実装は seed スクリプトで賄う）
-- `api/common/seed/cards.py` に楽天カード / Amazon Mastercard / Yahoo! JAPAN カード / 一般 1% 還元カード の 4 件を投入
-- `special_rewards` の JSON スキーマを `docs/api/cards.md` に記載（サイト名 → 倍率の dict）
-- TDD: 一覧の並び・取得・404 を網羅
+**実装結果**:
+- `api/routers/cards.py` を新設し `GET /api/cards`（一覧）と `GET /api/cards/{id}`（詳細）を実装。`api/main.py` で include。
+- レスポンスは camelCase（`baseRewardRate` / `annualFee` / `specialRewards`）。`api/schemas.py` に `CardResponse` を追加し `response_model_by_alias=True` で配信。
+- 一覧は bare array（envelope なし）、`id ASC` 固定。詳細は存在しない id で 404、非整数 id で 422。
+- 認証不要（公開）。書き込み系は Phase 1 では実装せず、行の投入は `python -m api.common.seed.cards` で行う。
+- `api/common/seed/cards.py` に `CARDS_SEED_DATA`（楽天カード / Amazon Mastercard / Yahoo! JAPAN カード / 一般 1% 還元カード）と `seed_cards(db)` を実装。`cards` テーブルが空のときのみ 4 件投入する冪等な実装（`name` ユニーク制約はスキーマ変更を伴うためスコープ外）。
+- `docs/api/cards.md` に `special_rewards` の JSON スキーマと初期 4 件の設定根拠、投入手順を記載。`docs/api/backend-spec.md` §2.5 に Cards 節を追加。
+- TDD: `tests/integration/test_cards.py` で 17 件（一覧の並び・空配列・camelCase 完全一致 / 詳細の 200・404・422 / 公開エンドポイント / seed の冪等性・名称一致）。全 122 件の `pytest -q` 緑。
 
 **完了条件**: シード後に `GET /api/cards` が 4 件返す。`special_rewards` の構造がドキュメントと一致する。
 
 ---
 
-### T-05. `UserProfile` API（参照・更新）
+### T-05. `UserProfile` API（参照・更新） ✅
 
 **なぜ**: Phase 1 のゴールである「ユーザー個別の実質価格」を出すために、ユーザーが楽天ランク・Prime 加入・既定カードを登録できる必要がある。
 
-**やること**:
-- `GET /api/me/profile` — 認証ユーザーの Profile を返す。未作成ならデフォルト値（`REGULAR` / 全フラグ false / `default_card_id=null`）で返す
-- `PUT /api/me/profile` — `rakuten_rank` / `is_amazon_prime` / `yahoo_premium` / `default_card_id` を更新（部分更新 or 全置換のどちらかに統一し、ADR-007 と整合させる）
-- 入力バリデーション: `default_card_id` は `cards` に存在することを確認（外部キー違反より前に 422 で返す）
-- TDD: 未認証 401 / 不正カード ID 422 / 正常更新の往復確認
+**実装結果**:
+- `api/routers/profile.py` および `api/repositories/user_profiles.py` を実装。
+- `GET /api/me/profile` — 認証ユーザーの Profile を返す。未作成なら 200 OK でデフォルト値（`regular` / 全フラグ false / `default_card_id=null`）を返す。
+- `PUT /api/me/profile` — `rakuten_rank` / `is_amazon_prime` / `yahoo_premium` / `is_rakuten_mobile` / `is_paypay_linked` / `default_card_id` を一括更新。全フィールド必須。
+- 入力バリデーション: `default_card_id` の存在確認をリポジトリ層で行い、存在しない場合は 422 を返す。
+- 順序制御: バリデーション順序（Pydantic -> 認証 401 -> カード存在 422）を維持するため、`Header(default=None)` でトークンを受け取り手動で `get_current_user` を呼ぶ実装を採用。
+- TDD: `tests/integration/test_profile.py` 18 件（GET/PUT 往復、未認証 401、不正カード 422、default_card の joinedload 返却等）が緑。
 
-**完了条件**: `PUT` 後に `GET` で同値が返る。401/422 が網羅される。
+**完了条件**: `PUT` 後に `GET` で同値が返る。401/422 が網羅される。`updated_at` が正しく更新される。
 
 ---
 
-### T-06. サイト別ポイント算出ロジックの純粋関数モジュール化
+### T-06. サイト別ポイント算出ロジックの純粋関数モジュール化 ✅
 
 **なぜ**: HTTP 層から切り離した純粋関数として書くことで、TDD でケースを大量に網羅できる。検索 API と単発の見積 API（将来の `POST /api/products/effective-price`）の両方から再利用したい。
 
-**やること**:
-- `api/lib/pricing/` を新設
-  - `base_rates.py` — サイト別の基本還元率テーブル（Amazon 1%、楽天 1%、Yahoo! 1% など）
-  - `rakuten_spu.py` — 楽天 SPU の段階加算（楽天カード 1%、楽天ゴールド 0.5%、Prime / Premium 等）
-  - `yahoo_premium.py` — PayPay / プレミアム加算
-  - `card_bonus.py` — `Card.special_rewards` を読んでサイト別倍率を引く
-  - `effective_price.py` — `effective = max(0, price + shipping - points)` をバックエンド側で再実装
-- 関数シグネチャは `(price: int, shipping: int, site: SiteType, profile: UserProfile | None, card: Card | None) -> Pricing` のように統一し、`Pricing = {points: int, effective_price: int, breakdown: list[Reward]}` を返す
-- TDD: 各サイト × ランク × カード × Prime 有無のパラメタライズドテストを最低 12 ケース
+**実装結果**:
+- `api/lib/pricing/engine.py` を実装。
+- Amazon, 楽天, Yahoo! ショッピングそれぞれのポイント算出ロジックを独立した関数（`calculate_points_amazon` 等）として定義。
+- `UserContext` データクラスを介してユーザー属性（Prime 有無、モバイル契約、PayPay 連携等）を渡し、倍率加算をシミュレートする。
+- 算出結果は `PricingResult`（総ポイント、実質価格、計算内訳 `breakdown`）として返す。
+- TDD: `tests/unit/pricing/test_engine.py` 14 件。楽天ダイヤモンド、Amazon プライム + Mastercard、Yahoo! プレミアム等、主要な組み合わせを網羅。フロントエンドの `effectivePrice.ts` との回帰テストも含む。
 
-**完了条件**: テーブル駆動 hostのテストが緑。`profile=None` のときフロントの `effectivePrice.ts` と同値になる回帰テストを 1 本以上含む。
+**完了条件**: テーブル駆動テストが緑。`profile=None` のときフロントの `effectivePrice.ts` と同値になる回帰テストを 1 本以上含む。
 
 ---
 
@@ -154,37 +158,36 @@
 - 入力エラーは 200+空配列ではなく 422（`q` 欠落・空・101 文字以上、`priceMin > priceMax`、非数 / 負数、不正な `sort`、`page` ≤ 0 など）。
 - TDD: 105 件中 52 件が本機能のテスト（FTS / trigram / フィルタ / ソート / ページング / 422 / クエリストリング契約）。
 
-**未着手の Phase 1 ギャップ**: 現在のレスポンスは `Product` 単体のサマリ（`ProductSummary`）のみで、`EcSiteProduct` / `Listing[]` の同梱は未実装。フロントが `types/product.ts` の `Listing` を要求する場面では T-08 と合わせてレスポンス形を再設計する。
+**型不整合リスク（解消済み）**: T-09 にて `frontend/types/api.ts` を OpenAPI スキーマから自動生成し、`searchClient.ts` を `ProductSearchEnvelope`（`{items, page, totalPages, totalCount, meta}`）形式に修正済み。フロント `Product` 型は `api.ts` からの再エクスポートに移行し、手書き二重管理は解消された。
 
 ---
 
-### T-08. 検索 API への UserProfile / Card 統合
+### T-08. 検索 API への UserProfile / Card 統合 ✅
 
 **なぜ**: 「ユーザーごとの実質価格」を返すという Phase 1 の主目的を満たす最後のピース。匿名アクセス時のフォールバック挙動も同時に確定させる。
 
-**やること**:
-- `Depends(get_current_user_optional)` を新設し、未認証でも 200 を返す扱いにする
-- 認証ありの場合は `UserProfile` と `default_card` を引いて T-06 の関数群へ渡し、各 `Listing` に `points` / `effectivePrice` / `breakdown` を載せる
-- 認証なしの場合は `profile=None, card=None` でフォールバック計算（=現状フロントと同じ素の式）
-- レスポンスに `personalization: { applied: bool, profile_summary?: ... }` を追加し、フロントの表示分岐を簡単にする
-- TDD: 認証あり / なし両方で同じクエリの結果を比較し、`points` の差分が期待値どおりであること
-
-**完了条件**: 楽天ダイヤモンド + 楽天カード保有ユーザーの楽天サイト商品で SPU 加算が反映される。匿名で同じリクエストを叩くと素の値に戻る。
+**実装結果**:
+- `Depends(get_current_user_optional)` を使用し、未認証でも 200 を返すように実装。
+- 認証ありの場合は `UserProfile` と `default_card` を引いて T-06 の関数群へ渡し、各 `Listing` に `points` / `effectivePrice` / `breakdown` を載せて返す。
+- 認証なしの場合は `points` / `effectivePrice` / `breakdown` を `null` で返す（T-08 設計方針）。
+- レスポンスの `meta` フィールドに `personalization: { applied: bool, rakutenRank?: string, hasCard: bool }` を追加。
+- TDD: `tests/integration/test_product_search.py` にて認証あり/なし、プロフィール有無、カード有無の全パターンを網羅。
 
 ---
 
-### T-09. OpenAPI スキーマ公開と TypeScript 型生成
+### T-09. OpenAPI スキーマ公開と TypeScript 型生成 ✅
 
-**なぜ**: ADR-005 の決定。フロント側の `Product` / `Listing` 型を手書きで二重管理すると、Phase 2 移行で必ず崩れる。Phase 1 の API 形が固まる T-08 直後に組み込み、CI で型ドリフトを検出できる状態にする。
+**なぜ**: ADR-005 の決定。フロント側の `Product` / `Listing` 型を手書きで二重管理すると、Phase 2 移行で必ず崩れる。Phase 1 の API 形が固まる T-08 直後に組み込み、型ドリフトを検出できる状態にする。
 
-**やること**:
-- `api/main.py` で `openapi.json` のエクスポート手段を確立（FastAPI 既定の `/openapi.json` をそのまま使うか、ビルドスクリプターでファイル化）
-- `frontend/package.json` に `openapi-typescript` を追加し、`npm run gen:api` で `frontend/types/api.ts` を生成
-- `frontend/types/product.ts` のうちサーバ由来の型（`Product` / `Listing` など）は `api.ts` から再エクスポートする形に切替。`ImagePriority` / `SortKey` / `ResolvedImage` は手書きのまま残す
-- CI（または `package.json` の `predev` / `pretest`）で再生成 → diff チェックを走らせ、型ドリフトを検知できるようにする
-- ADR-005 の「OpenAPI 型同期」記述からのリンクを `docs/tech/api-type-sync.md`（新設）に追加
+**実装結果**:
+- FastAPI の `/openapi.json` エンドポイントをそのまま利用（`api/main.py` のデフォルト動作）
+- `frontend/package.json` に `openapi-typescript@^7.13.0` を追加し、`npm run gen:api` で `frontend/types/api.ts` を生成（700 行超の完全な型定義）
+- `npm run check:api-types` スクリプトを整備：再生成 → `git diff --exit-code` で型ドリフトを検知（手元実行ベース）
+- `frontend/types/product.ts` のサーバ由来型（`Product` / `Listing` など）を `api.ts` からの再エクスポート形式に切替。`ImagePriority` / `SortKey` / `ResolvedImage` は手書きのまま残す。フロント 27 ファイルの型参照を更新
+- `searchClient.ts` を `ProductSearchEnvelope`（`{items, page, totalPages, totalCount, meta}`）形式に修正し、envelope 直返しに対応
+- `docs/tech/api-type-sync.md` を新設し、型同期フローとコマンドリファレンスを文書化
 
-**完了条件**: `npm run gen:api` 実行後に `git status` がクリーン。`Product` / `Listing` の手書き定義が消えても `frontend/` のビルドが通る。
+**CI**: `.github/workflows/check-api-types.yml` にて PR 時に自動ドリフト検知を実装済み。`scripts/export_openapi.py` で DB・サーバー起動なしにスキーマを書き出し、`openapi-typescript` で再生成して差分チェックを行う。
 
 ---
 
@@ -192,9 +195,10 @@
 
 これらは ADR-006 上は Phase 2 だが、Phase 1 の成果を腐らせないために連続で着手することを推奨する。本計画には含めず、Phase 2 計画起票時に細分化する。
 
-- B-1. `frontend/lib/mock/searchClient.ts` の `Promise<Product[]>` 化と `app/page.tsx` の `useEffect` 化
-- B-2. `lib/mock/` をテストフィクスチャ専用に再配置（本番バンドルから除外）
-- B-3. ゲスト → ログイン後の表示切り替え UX（ADR-006「影響」節）
+- B-1. `frontend/lib/mock/searchClient.ts` の `Promise<Product[]>` 化と `app/page.tsx` の `useEffect` 化 — ✅ 完了（SWR を採用し fetch ベース化。`useEffect` ではなく SWR で扱う形に変更）
+- B-2. `lib/mock/` をテストフィクスチャ専用に再配置（本番バンドルから除外） — 撤回（`frontend/lib/mock/` は既に削除済み）
+- B-3. 検索レスポンスの envelope 形（`{items, page, totalPages, totalCount}`）とフロント `Product` 型の整合 — ✅ 完了（T-09 にて `searchClient.ts` を `ProductSearchEnvelope` 形式に修正、型は `api.ts` から参照）
+- B-4. ゲスト → ログイン後の表示切り替え UX（ADR-006「影響」節）
 
 ## 依存グラフ（要約）
 
@@ -217,7 +221,7 @@ T-04 / T-05 / T-06 / T-07 は依存解消後に並列着手可能。サブエー
 | 認証 ADR の決定が長引き Phase 1 全体が止まる | T-03 で議論が分岐 | T-03 を「ADR 起票だけ」と「最小実装」に分割し、最小実装は ADR の暫定結論で先行可能にする |
 | 楽天 SPU の倍率定義が変動して T-06 のテストが頻繁に壊れる | 倍率テーブルがハードコードされている | `api/lib/pricing/base_rates.py` をデータクラスに閉じ込め、将来 DB / 設定ファイル化できる構造にする |
 | OpenAPI 生成の差分検知が CI コストを上げる | 生成 diff が CI で頻繁に出る | T-09 で `npm run gen:api -- --check` 形式の差分チェックモードを用意し、生成自体は開発者の手元で行う運用にする |
-| 検索 API の N+1 問題 | 商品 × 3 サイト × 価格履歴の eager load 不足 | T-07 の段階で `selectinload` を入れ、テストで SQL 発行回数を assert する（`sqlalchemy.event` で計測） |
+| 検索 API の N+1 問題 | 商品 × 3 サイト × 価格履歴の eager load 不足 | T-07 の段階で `selectinload` 入れ、テストで SQL 発行回数を assert する（`sqlalchemy.event` で計測） |
 
 ## 受け入れ基準（Phase 1 全体）
 

@@ -22,6 +22,12 @@ import pytest
 os.environ.setdefault(
     "DATABASE_URL", "postgresql://placeholder@localhost/placeholder"
 )
+# `api.common.security` reads JWT_SECRET lazily on first call, but a
+# deterministic placeholder is required so the integration tests have a
+# stable, repo-known value for signing tokens. The override happens before
+# the FastAPI app is imported below so the security module can resolve
+# the secret on first use during request handling.
+os.environ["JWT_SECRET"] = "test-jwt-secret-for-integration-only"
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -29,7 +35,7 @@ from sqlalchemy.orm import sessionmaker
 from testcontainers.postgres import PostgresContainer
 
 from api.common.database import get_db
-from api.common.models import Base, Product
+from api.common.models import Base, Card, EcSiteProduct, Product, SiteType
 from api.main import app
 
 
@@ -130,6 +136,63 @@ def make_product():
             tags=tags if tags is not None else [],
             in_stock=in_stock,
             current_price=current_price,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_card():
+    """Factory for `Card` instances with sensible test defaults.
+
+    Tests pass only the fields they care about; everything else gets a
+    deterministic placeholder. `special_rewards` defaults to `{}` (matching
+    the column's NOT NULL JSON default in `api/common/models.py`).
+    """
+
+    def _make(
+        name="テストカード",
+        base_reward_rate=1.0,
+        annual_fee=0,
+        special_rewards=None,
+    ):
+        return Card(
+            name=name,
+            base_reward_rate=base_reward_rate,
+            annual_fee=annual_fee,
+            special_rewards=special_rewards if special_rewards is not None else {},
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_site_product():
+    """Factory for `EcSiteProduct` instances with sensible test defaults.
+
+    The `product` argument must already be committed to the database so that
+    `product.id` is accessible (SQLAlchemy resolves the PK after flush/commit).
+    Tests call `_seed` (or `db_session.commit()`) on the product first, then
+    use this factory.
+
+    `site_type` accepts a lowercase string value ("amazon", "rakuten", "yahoo")
+    and converts it to the matching `SiteType` enum member.
+    """
+
+    def _make(
+        product,
+        site_type="rakuten",
+        site_product_id="ITEM001",
+        url="https://example.com/item",
+    ):
+        resolved_site_type = (
+            SiteType(site_type) if isinstance(site_type, str) else site_type
+        )
+        return EcSiteProduct(
+            product_id=product.id,
+            site_type=resolved_site_type,
+            site_product_id=site_product_id,
+            url=url,
         )
 
     return _make

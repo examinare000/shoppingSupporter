@@ -1,0 +1,58 @@
+# Base stage for shared dependencies
+FROM python:3.11-alpine AS base
+
+# Prevent Python from writing .pyc files and enable unbuffered logging
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=on
+
+WORKDIR /app
+
+# Install system dependencies needed for building/running the app
+# postgresql-dev is needed for psycopg2 (even if using -binary, it's safer)
+RUN apk add --no-cache \
+    libpq
+
+# --- Development stage ---
+FROM base AS development
+
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    postgresql-dev \
+    git
+
+# Install dependencies
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install -r requirements-dev.txt
+
+# Non-root user for development (optional but recommended by rule 70)
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Make sure the user has access to the app directory
+RUN chown -R appuser:appgroup /app
+USER appuser
+
+# The source code will be mounted via volumes in compose.yml
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# --- Production stage ---
+FROM base AS production
+
+# Install production dependencies
+COPY requirements.txt ./
+RUN apk add --no-cache --virtual .build-deps \
+    gcc \
+    musl-dev \
+    postgresql-dev \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apk del .build-deps
+
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+COPY --chown=appuser:appgroup . .
+
+USER appuser
+
+EXPOSE 8000
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -13,3 +13,7 @@
 - [ADR-007: ユーザー認証戦略の決定](007-authentication-strategy.md)
 - [ADR-008: データベースサービスの選定](008-database-selection.md)
 - [ADR-009: backend/ を api/ に統合し Vercel + Neon 構成を正本化](009-backend-to-api-consolidation.md)
+- [ADR-010: Postgres 全文検索 (FTS) と Trigram 類似度による商品検索の実装](010-postgres-fts-and-trigram-search.md)
+- [ADR-011: testcontainers と Alembic を活用したインテグレーションテスト戦略](011-integration-testing-strategy.md)
+- [ADR-012: OpenAPI スキーマを活用したフロントエンド型同期戦略](012-openapi-type-sync-strategy.md)
+- [ADR-013: API スキーマ契約規約（Pydantic v2 ベース）](013-api-schema-conventions.md)

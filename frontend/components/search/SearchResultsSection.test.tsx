@@ -6,86 +6,83 @@ import type { Product, ImagePriority } from '@/types/product';
 
 const PRIORITY: ImagePriority = ['amazon', 'rakuten', 'yahoo'];
 
-// product-A: 実質価格安い、還元率低い
+/**
+ * フィクスチャ設計（T-09 以降）:
+ * ListingOut に price / pointRate が存在しないため、代替フィールドで設計する:
+ *   effectivePriceAsc ソート → effectivePrice 昇順 (A < B)
+ *   pointRateDesc ソート     → points 降順       (B > A)
+ */
+
+// product-A: 実質価格安い、ポイント少ない
 const productA: Product = {
   id: 'p-a',
   name: 'Product A',
-  category: 'cat',
+  description: null,
+  imageUrl: 'https://img.example.com/a.jpg',
+  tags: ['cat'],
+  inStock: true,
+  currentPrice: 1000,
   listings: [
     {
-      site: 'amazon',
+      siteType: 'amazon',
       siteProductId: 'A1',
       url: 'https://example.com/a1',
-      price: 1000,
-      shippingFee: 0,
       points: 0,
-      pointRate: 0.01,
-      imageUrl: 'https://img.example.com/a.jpg',
-      inStock: true,
+      effectivePrice: 1000,
+      breakdown: null,
     },
     {
-      site: 'rakuten',
+      siteType: 'rakuten',
       siteProductId: 'A2',
       url: 'https://example.com/a2',
-      price: 1100,
-      shippingFee: 0,
       points: 0,
-      pointRate: 0.01,
-      imageUrl: 'https://img.example.com/a2.jpg',
-      inStock: true,
+      effectivePrice: 1100,
+      breakdown: null,
     },
     {
-      site: 'yahoo',
+      siteType: 'yahoo',
       siteProductId: 'A3',
       url: 'https://example.com/a3',
-      price: 1200,
-      shippingFee: 0,
       points: 0,
-      pointRate: 0.01,
-      imageUrl: 'https://img.example.com/a3.jpg',
-      inStock: true,
+      effectivePrice: 1200,
+      breakdown: null,
     },
   ],
 };
 
-// product-B: 実質価格高い、還元率高い
+// product-B: 実質価格高い、ポイント多い
 const productB: Product = {
   id: 'p-b',
   name: 'Product B',
-  category: 'cat',
+  description: null,
+  imageUrl: 'https://img.example.com/b.jpg',
+  tags: ['cat'],
+  inStock: true,
+  currentPrice: 4900,
   listings: [
     {
-      site: 'amazon',
+      siteType: 'amazon',
       siteProductId: 'B1',
       url: 'https://example.com/b1',
-      price: 5000,
-      shippingFee: 0,
       points: 100,
-      pointRate: 0.20,
-      imageUrl: 'https://img.example.com/b.jpg',
-      inStock: true,
+      effectivePrice: 4900,
+      breakdown: null,
     },
     {
-      site: 'rakuten',
+      siteType: 'rakuten',
       siteProductId: 'B2',
       url: 'https://example.com/b2',
-      price: 5100,
-      shippingFee: 0,
       points: 100,
-      pointRate: 0.20,
-      imageUrl: 'https://img.example.com/b2.jpg',
-      inStock: true,
+      effectivePrice: 5000,
+      breakdown: null,
     },
     {
-      site: 'yahoo',
+      siteType: 'yahoo',
       siteProductId: 'B3',
       url: 'https://example.com/b3',
-      price: 5200,
-      shippingFee: 0,
       points: 100,
-      pointRate: 0.20,
-      imageUrl: 'https://img.example.com/b3.jpg',
-      inStock: true,
+      effectivePrice: 5100,
+      breakdown: null,
     },
   ],
 };
@@ -132,13 +129,13 @@ describe('SearchResultsSection', () => {
         {...noopHandlers}
       />,
     );
-    // 初期状態（effectivePriceAsc）: A が先に出る
+    // 初期状態（effectivePriceAsc）: A の最安 effectivePrice(1000) < B の最安 effectivePrice(4900)
     let articles = screen.getAllByRole('article');
     expect(within(articles[0]!).getByRole('heading', { level: 2 })).toHaveTextContent(
       'Product A',
     );
 
-    // 還元率降順に切替: B が先に出る
+    // 還元率降順に切替: B の最大 points(100) > A の最大 points(0) → B が先
     await user.click(screen.getByLabelText(/還元率 降順/));
     articles = screen.getAllByRole('article');
     expect(within(articles[0]!).getByRole('heading', { level: 2 })).toHaveTextContent(

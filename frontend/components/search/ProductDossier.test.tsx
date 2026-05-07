@@ -5,45 +5,44 @@ import type { Product, ImagePriority } from '@/types/product';
 
 const PRIORITY: ImagePriority = ['amazon', 'rakuten', 'yahoo'];
 
-// 実質価格が rakuten=8000 < amazon=10000 < yahoo=12000 となる構成。
-// 並び替えロジックの結果を検証するための故意の差をつけている。
+/**
+ * フィクスチャ設計:
+ * 実質価格が rakuten(8000) < amazon(10000) < yahoo(12000) となる構成。
+ * effectivePrice フィールド（バックエンド算出済み）を直接セットすることで
+ * sortListings → calculateEffectivePrice の連鎖をテスト可能にする。
+ */
 const product: Product = {
   id: 'p-test-dossier',
   name: '万年筆 Heritage 14K',
-  category: '文具',
+  description: null,
+  imageUrl: 'https://img.example.com/product.jpg',
+  tags: ['文具'],
+  inStock: true,
+  currentPrice: 8000,
   listings: [
     {
-      site: 'amazon',
+      siteType: 'amazon',
       siteProductId: 'A',
       url: 'https://example.com/amazon-pen',
-      price: 10000,
-      shippingFee: 0,
       points: 0,
-      pointRate: 0,
-      imageUrl: 'https://img.example.com/amazon.jpg',
-      inStock: true,
+      effectivePrice: 10000,
+      breakdown: null,
     },
     {
-      site: 'rakuten',
+      siteType: 'rakuten',
       siteProductId: 'R',
       url: 'https://example.com/rakuten-pen',
-      price: 9000,
-      shippingFee: 0,
       points: 1000,
-      pointRate: 0.10,
-      imageUrl: 'https://img.example.com/rakuten.jpg',
-      inStock: true,
+      effectivePrice: 8000,
+      breakdown: null,
     },
     {
-      site: 'yahoo',
+      siteType: 'yahoo',
       siteProductId: 'Y',
       url: 'https://example.com/yahoo-pen',
-      price: 12000,
-      shippingFee: 0,
       points: 0,
-      pointRate: 0,
-      imageUrl: 'https://img.example.com/yahoo.jpg',
-      inStock: true,
+      effectivePrice: 12000,
+      breakdown: null,
     },
   ],
 };
@@ -60,7 +59,7 @@ describe('ProductDossier', () => {
     expect(screen.getByText('05.')).toBeInTheDocument();
   });
 
-  it('出品行が実質価格昇順で表示される', () => {
+  it('出品行が実質価格昇順（effectivePrice 昇順）で表示される', () => {
     render(<ProductDossier product={product} index={0} priority={PRIORITY} />);
     // table の各 row 内に <a> があるので、リンクの順序で検証
     const rows = screen.getAllByRole('row');

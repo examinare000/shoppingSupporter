@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional, Tuple
 
 from sqlalchemy import ColumnElement, and_, bindparam, func, literal, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..common.models import Product
 
@@ -139,6 +139,11 @@ def search_products(
 
     items_stmt = (
         select(Product)
+        # Why selectinload: T-08 で各商品の EC サイトリストが必要。
+        # selectinload は WHERE product_id IN (...) の追加 1 クエリで解決し、
+        # N+1 を防ぐ。joinedload だと JOIN で重複行が生まれページ数の計算が
+        # 乱れるため選択しない。
+        .options(selectinload(Product.site_products))
         .where(where_clause)
         .order_by(*_order_by(params.sort, q_param))
         .limit(PAGE_SIZE)
