@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..models import Card
@@ -84,6 +85,11 @@ def seed_cards(db: Session) -> None:
     #   preserved). Name-based upsert would silently add new rows on top of
     #   pre-existing data from a different source, causing FK-safe but
     #   semantically wrong state.
+    #
+    # Advisory lock serializes concurrent callers (e.g. multiple web workers
+    # starting simultaneously) so only one process runs the check+insert pair.
+    # pg_advisory_xact_lock is released automatically at transaction end.
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext('seed_cards')::bigint)"))
     if db.query(Card).count() > 0:
         return
     for row in CARDS_SEED_DATA:

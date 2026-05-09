@@ -18,7 +18,7 @@ import time
 from collections.abc import Sequence
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
 from ..common.database import get_db
@@ -217,7 +217,7 @@ def search_products_endpoint(
     response_model_by_alias=True,
 )
 def get_product_history_endpoint(
-    id: str,
+    product_id: str = Path(..., alias="id"),
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
 ) -> ProductHistoryResponse:
@@ -226,11 +226,11 @@ def get_product_history_endpoint(
     ID (UUID) または JANコードで商品を特定し、過去指定日数の価格推移を
     日付・サイトごとにグルーピングして返却する。
     """
-    result = get_product_history(db, id, days)
+    result = get_product_history(db, product_id, days)
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    product_id, histories = result
+    resolved_id, histories = result
 
     # グルーピング: 日付 -> サイト -> 価格情報
     # フロントエンド（recharts）で扱いやすいよう、日付ごとのオブジェクトにまとめる。
@@ -250,4 +250,4 @@ def get_product_history_endpoint(
         for d, s in sorted(grouped.items())
     ]
 
-    return ProductHistoryResponse(product_id=product_id, histories=history_entries)
+    return ProductHistoryResponse(product_id=resolved_id, histories=history_entries)

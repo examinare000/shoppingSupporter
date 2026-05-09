@@ -6,7 +6,7 @@ Exercises the repository's downsampling logic and the router's grouping behavior
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -30,7 +30,7 @@ class TestRepositoryProductHistory:
         db_session.add(sp)
         db_session.commit()
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Today: 2 records. Latest (h2) should be picked by the DISTINCT ON logic.
         h1 = PriceHistory(ec_site_product_id=sp.id, price=1000, points=10, recorded_at=now - timedelta(hours=2))
         h2 = PriceHistory(ec_site_product_id=sp.id, price=950, points=9, recorded_at=now - timedelta(hours=1))
@@ -113,7 +113,7 @@ class TestEndpointProductHistory:
         sp = make_site_product(product, "amazon")
         _seed(db_session, [sp])
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         old_h = PriceHistory(ec_site_product_id=sp.id, price=500, recorded_at=now - timedelta(days=10))
         new_h = PriceHistory(ec_site_product_id=sp.id, price=1000, recorded_at=now)
         _seed(db_session, [old_h, new_h])

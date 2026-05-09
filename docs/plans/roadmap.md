@@ -51,5 +51,7 @@ Phase 1 のタスク（T-01〜T-09 / B-3）はすべて完了。次のアクシ�
 
 - プロダクト PRD: `docs/prd/pricehack.md`
 - 詳細実装プラン (Phase 1): `docs/plans/phase1-foundation.md`
+- 詳細実装プラン (Phase 2): `docs/plans/phase2-price-history.md`
+- 詳細実装プラン (Phase 3): `docs/plans/phase3-analytics-suggestion.md`
 - システム設計書: `docs/design/system-design.md`
 - 意思決定記録 (ADR): `docs/adr/` (特に 010:検索、011:テスト、012:型同期)

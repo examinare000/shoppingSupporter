@@ -76,7 +76,9 @@ const PriceChart: React.FC<PriceChartProps> = ({ data }) => {
             axisLine={false}
             tickLine={false}
             tick={{ fill: 'var(--ink-secondary)' }}
-            tickFormatter={(value) => `¥${(value / 1000).toFixed(1)}k`}
+            tickFormatter={(value) =>
+              value >= 1000 ? `¥${(value / 1000).toFixed(1)}k` : `¥${Math.round(value)}`
+            }
           />
           <Tooltip
             contentStyle={{
@@ -103,7 +105,6 @@ const PriceChart: React.FC<PriceChartProps> = ({ data }) => {
               dot={false}
               activeDot={{ r: 4, strokeWidth: 0 }}
               name={site.charAt(0).toUpperCase() + site.slice(1)}
-              connectNulls
             />
           ))}
         </LineChart>

@@ -289,7 +289,10 @@ export interface components {
          *         to be plotted.
          */
         PriceHistoryEntry: {
-            /** Date */
+            /**
+             * Date
+             * Format: date
+             */
             date: string;
             /** Sites */
             sites: {

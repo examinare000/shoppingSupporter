@@ -16,7 +16,7 @@ alias convention.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -228,7 +228,7 @@ class PriceHistoryEntry(BaseModel):
         charts (recharts) expect an array of objects where each key is a line
         to be plotted.
     """
-    date: str  # ISO 8601 YYYY-MM-DD
+    date: date
     # Key is SiteType value (amazon, rakuten, yahoo)
     sites: Dict[str, SiteHistory]
 
