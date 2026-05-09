@@ -297,16 +297,6 @@ export interface components {
             };
         };
         /**
-         * SiteHistory
-         * @description 特定サイト・時点の価格情報。
-         */
-        SiteHistory: {
-            /** Price */
-            price: number;
-            /** Points */
-            points: number;
-        };
-        /**
          * ProductHistoryResponse
          * @description 価格履歴APIのトップレベルレスポンス。
          */
@@ -374,6 +364,19 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * SiteHistory
+         * @description 特定サイト・時点の価格情報。
+         *
+         *     Why SiteHistory (not PricePoint): docs/plans/phase2-price-history.md T-10
+         *     で定義された正式名称。OpenAPI スキーマ名として公開される。
+         */
+        SiteHistory: {
+            /** Price */
+            price: number;
+            /** Points */
+            points: number;
         };
         /** TokenResponse */
         TokenResponse: {
