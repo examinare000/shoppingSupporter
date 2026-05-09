@@ -21,6 +21,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/products/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Product History Endpoint
+         * @description 特定商品の価格履歴を取得する。
+         *
+         *     ID (UUID) または JANコードで商品を特定し、過去指定日数の価格推移を
+         *     日付・サイトごとにグルーピングして返却する。
+         */
+        get: operations["get_product_history_endpoint_api_products__id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/signup": {
         parameters: {
             query?: never;
@@ -257,6 +280,45 @@ export interface components {
             /** Hascard */
             hasCard: boolean;
         };
+        /**
+         * PriceHistoryEntry
+         * @description 特定日の全サイト価格推移。
+         *
+         *     Why dictionary format:
+         *         charts (recharts) expect an array of objects where each key is a line
+         *         to be plotted.
+         */
+        PriceHistoryEntry: {
+            /** Date */
+            date: string;
+            /** Sites */
+            sites: {
+                [key: string]: components["schemas"]["SiteHistory"];
+            };
+        };
+        /**
+         * SiteHistory
+         * @description 特定サイト・時点の価格情報。
+         */
+        SiteHistory: {
+            /** Price */
+            price: number;
+            /** Points */
+            points: number;
+        };
+        /**
+         * ProductHistoryResponse
+         * @description 価格履歴APIのトップレベルレスポンス。
+         */
+        ProductHistoryResponse: {
+            /**
+             * Productid
+             * Format: uuid
+             */
+            productId: string;
+            /** Histories */
+            histories: components["schemas"]["PriceHistoryEntry"][];
+        };
         /** ProductSearchEnvelope */
         ProductSearchEnvelope: {
             /** Items */
@@ -419,6 +481,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductSearchEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_product_history_endpoint_api_products__id__history_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductHistoryResponse"];
                 };
             };
             /** @description Validation Error */
