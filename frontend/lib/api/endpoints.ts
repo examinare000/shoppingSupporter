@@ -25,3 +25,10 @@ export const PRODUCTS_SEARCH_QUERY_PARAM = 'q';
 export function buildProductsSearchUrl(query: string): string {
   return `${PRODUCTS_SEARCH_PATH}?${PRODUCTS_SEARCH_QUERY_PARAM}=${encodeURIComponent(query)}`;
 }
+
+/**
+ * 価格履歴取得エンドポイントの URL を組み立てる純関数。
+ */
+export function buildProductHistoryUrl(id: string, days: number = 30): string {
+  return `/api/products/${encodeURIComponent(id)}/history?days=${days}`;
+}
