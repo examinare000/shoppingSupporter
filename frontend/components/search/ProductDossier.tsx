@@ -1,11 +1,17 @@
+import useSWR from 'swr';
 import type { Product, ImagePriority } from '@/types/product';
+import type { components } from '@/types/api';
 import { sortListings } from '@/lib/pricing/sortListings';
 import { calculateEffectivePrice } from '@/lib/pricing/effectivePrice';
+import { buildProductHistoryUrl } from '@/lib/api/endpoints';
 import { Ordinal } from '@/components/editorial/Ordinal';
 import { MarginalNote } from '@/components/editorial/MarginalNote';
 import { RuledDivider } from '@/components/editorial/RuledDivider';
 import { ProductThumbnail } from '@/components/results/ProductThumbnail';
+import PriceChart from '@/components/results/PriceChart';
 import { ListingRow } from './ListingRow';
+
+type ProductHistoryResponse = components['schemas']['ProductHistoryResponse'];
 
 /**
  * 1 商品を 1 記事として描画する。新聞記事レイアウトを再現。
@@ -35,6 +41,11 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
   // （ソート済み配列の先頭が最安だが、価格同値の場合に複数行を朱色化したいので effectivePrice 比較で判定する）
   const cheapestPrice =
     sorted.length > 0 ? calculateEffectivePrice(sorted[0]!) : Number.POSITIVE_INFINITY;
+
+  // 価格履歴の取得 (Phase 2)
+  const { data: historyData } = useSWR<ProductHistoryResponse>(
+    buildProductHistoryUrl(product.id, 90) // 直近 90 日分を表示
+  );
 
   return (
     <article className="py-8">
@@ -80,6 +91,17 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-8">
+        <h3 className="font-mono text-[10px] small-caps text-ink-muted mb-4 tracking-editorial">
+          Price History (90 Days)
+        </h3>
+        {historyData ? (
+          <PriceChart data={historyData.histories} />
+        ) : (
+          <div className="w-full h-32 animate-pulse bg-paper-high" />
+        )}
       </div>
 
       <div className="mt-6">
