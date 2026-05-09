@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import bcrypt
 import jwt as pyjwt
@@ -98,7 +99,7 @@ def decode_access_token(token: str) -> dict:
     return pyjwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
 
 
-def _extract_bearer_token(authorization: str | None) -> str:
+def _extract_bearer_token(authorization: Optional[str]) -> str:
     """`Authorization: Bearer <token>` ヘッダから token 部分を取り出す。
 
     Bearer スキーム以外、ヘッダ欠落、空のトークンはすべて 401 にする。
@@ -112,7 +113,7 @@ def _extract_bearer_token(authorization: str | None) -> str:
 
 
 def get_current_user(
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ) -> User:
     """JWT 認証済みユーザーを返す FastAPI 依存性。
@@ -141,9 +142,9 @@ def get_current_user(
 
 
 def get_current_user_optional(
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
-) -> User | None:
+) -> Optional[User]:
     """JWT 認証済みユーザーを返す。未認証・無効トークンは None を返す FastAPI 依存性。
 
     Why None を返すか:
