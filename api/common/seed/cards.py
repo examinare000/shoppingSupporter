@@ -9,11 +9,11 @@ CLI usage (run against the configured `DATABASE_URL`):
 
     python -m api.common.seed.cards
 
-Idempotency: matches cards by name. Existing rows are updated in-place
-(base_reward_rate / annual_fee / special_rewards); missing rows are inserted.
-This avoids duplicates and preserves `UserProfile.default_card_id` FKs
-across re-seeds, allowing reward-rate corrections without a destructive
-re-seed cycle.
+Idempotency: count==0 gate. If any card row already exists, the seed
+function returns immediately without inserting or modifying anything.
+This preserves `UserProfile.default_card_id` FKs across application
+restarts while preventing accidental duplication when no unique
+constraint exists on `cards.name`.
 """
 
 from __future__ import annotations
@@ -70,21 +70,24 @@ CARDS_SEED_DATA: List[Dict] = [
 
 
 def seed_cards(db: Session) -> None:
-    """Insert or update the spec cards.
+    """Insert the spec cards into an empty table.
 
-    Idempotency: Matches cards by name. This allows updating reward rates in
-    the seed data without creating duplicates or breaking existing FKs
-    that reference these cards.
+    Idempotency: count==0 gate. If any card already exists the function
+    returns immediately without inserting or modifying anything. This prevents
+    accidental duplication when no unique constraint exists on `cards.name`,
+    and preserves `UserProfile.default_card_id` FKs across application
+    restarts.
     """
+    # Why count==0 gate rather than name-based upsert:
+    #   The planner's explicit design choice. A non-empty table means the
+    #   environment has already been seeded (or has manual data that must be
+    #   preserved). Name-based upsert would silently add new rows on top of
+    #   pre-existing data from a different source, causing FK-safe but
+    #   semantically wrong state.
+    if db.query(Card).count() > 0:
+        return
     for row in CARDS_SEED_DATA:
-        existing = db.query(Card).filter(Card.name == row["name"]).one_or_none()
-        if existing:
-            # Update existing row fields
-            existing.base_reward_rate = row["base_reward_rate"]
-            existing.annual_fee = row["annual_fee"]
-            existing.special_rewards = row["special_rewards"]
-        else:
-            db.add(Card(**row))
+        db.add(Card(**row))
     db.commit()
 
 
