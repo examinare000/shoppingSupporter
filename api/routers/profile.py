@@ -11,6 +11,8 @@
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -100,7 +102,7 @@ def update_profile(
     #   ここで `authorization` を生で受け、body 検証通過後に
     #   `get_current_user` を直接呼ぶことで順序を固定する。
     payload: UserProfileUpdate,
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ) -> UserProfile:
     """全フィールド必須の PUT で UserProfile を全置換する（初回 INSERT を含む）。

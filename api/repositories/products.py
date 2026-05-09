@@ -17,12 +17,22 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional, Tuple
 
-from sqlalchemy import ColumnElement, and_, bindparam, func, literal, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import (
+    ColumnElement,
+    and_,
+    bindparam,
+    func,
+    literal,
+    or_,
+    select,
+)
+from sqlalchemy.orm import Session, joinedload, selectinload
 
-from ..common.models import Product
+from ..common.models import EcSiteProduct, PriceHistory, Product
 
 PAGE_SIZE = 10
 
@@ -151,3 +161,55 @@ def search_products(
     )
     items = db.execute(items_stmt).scalars().all()
     return items, total_count
+
+
+def get_product_history(
+    db: Session, product_id_or_jan: str, days: int = 30
+) -> Optional[Tuple[uuid.UUID, Sequence[PriceHistory]]]:
+    """指定された商品の価格履歴を取得する。
+
+    ID (UUID) または JANコードで商品を検索し、見つかった場合はその商品の
+    EcSiteProduct に紐づく PriceHistory を取得する。
+    日次でダウンサンプリング（各サイト・各日の最新レコードを取得）を行う。
+    """
+    # 1. 商品の特定
+    product_query = select(Product.id)
+    try:
+        # UUIDとして解釈を試みる
+        parsed_id = uuid.UUID(product_id_or_jan)
+        product_query = product_query.where(Product.id == parsed_id)
+    except ValueError:
+        # UUIDでない場合はJANコードとして扱う
+        product_query = product_query.where(Product.jan_code == product_id_or_jan)
+
+    product_id = db.execute(product_query).scalar_one_or_none()
+    if not product_id:
+        return None
+
+    # 2. 履歴の取得（ダウンサンプリング）
+    # DISTINCT ON を使用して各サイト・各日の最新 (recorded_at DESC) レコードを取得
+    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    
+    # SQLAlchemy で DISTINCT ON を表現するには .distinct(cols) を使う
+    # ORDER BY の先頭と一致させる必要がある
+    date_trunc = func.date_trunc("day", PriceHistory.recorded_at)
+    stmt = (
+        select(PriceHistory)
+        .options(joinedload(PriceHistory.ec_site_product))
+        .join(EcSiteProduct)
+        .where(
+            and_(
+                EcSiteProduct.product_id == product_id,
+                PriceHistory.recorded_at >= start_date,
+            )
+        )
+        .distinct(PriceHistory.ec_site_product_id, date_trunc)
+        .order_by(
+            PriceHistory.ec_site_product_id,
+            date_trunc,
+            PriceHistory.recorded_at.desc(),
+        )
+    )
+
+    histories = db.execute(stmt).scalars().all()
+    return product_id, histories

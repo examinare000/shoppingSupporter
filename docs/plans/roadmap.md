@@ -6,8 +6,8 @@
 
 | フェーズ | タイトル | 状態 | 重点領域 |
 |---|---|---|---|
-| Phase 1 | 基盤整備と UserProfile 連携 | 進行中 (80%) | バックエンド基盤、認証、パーソナライズ計算 |
-| Phase 2 | 価格履歴の可視化 | 計画中 | 履歴 API、チャート UI、フロントエンド強化 |
+| Phase 1 | 基盤整備と UserProfile 連携 | 完了 (100%) | バックエンド基盤、認証、パーソナライズ計算 |
+| Phase 2 | 価格履歴の可視化 | 完了 (100%) | 履歴 API、チャート UI、フロントエンド強化 |
 | Phase 3 | データ分析と予測インテリジェンス | 計画中 | セール予測、サジェストエンジン、UX 最適化 |
 | Phase 4 | 自動データ取得の高度化 | 長期 | 外部連携、公式 API 以外のデータ取得（要 ADR） |
 
@@ -29,8 +29,8 @@
 ### Phase 2: 価格履歴の可視化 (Frontend Focus)
 **目標**: 過去の価格推移を可視化し、現在の価格の妥当性をユーザーが判断できるようにする。
 
-- [ ] F-16: 価格履歴取得 API（JAN / EcSiteProduct 単位）
-- [ ] F-17: 価格推移チャート UI（エディトリアルデザイン準拠）
+- [x] F-16: 価格履歴取得 API（JAN / EcSiteProduct 単位）
+- [x] F-17: 価格推移チャート UI（エディトリアルデザイン準拠）
 - [x] B-3: 検索レスポンスのエンベロープ形とフロント型の整合（T-09 にて解消済み）
 
 ### Phase 3: データ分析と予測インテリジェンス (Analytics)
@@ -51,5 +51,7 @@ Phase 1 のタスク（T-01〜T-09 / B-3）はすべて完了。次のアクシ�
 
 - プロダクト PRD: `docs/prd/pricehack.md`
 - 詳細実装プラン (Phase 1): `docs/plans/phase1-foundation.md`
+- 詳細実装プラン (Phase 2): `docs/plans/phase2-price-history.md`
+- 詳細実装プラン (Phase 3): `docs/plans/phase3-analytics-suggestion.md`
 - システム設計書: `docs/design/system-design.md`
 - 意思決定記録 (ADR): `docs/adr/` (特に 010:検索、011:テスト、012:型同期)

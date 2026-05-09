@@ -16,7 +16,7 @@ alias convention.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -209,3 +209,31 @@ class UserProfileResponse(UserProfileBase):
     # 未保存ユーザー（DB にレコードがない）の場合は `None` を返す。
     # docs/design/user-profile.md §3.1「保存済み / 未保存の区別」。
     updated_at: Optional[datetime] = Field(serialization_alias="updatedAt")
+
+
+class SiteHistory(BaseModel):
+    """特定サイト・時点の価格情報。
+
+    Why SiteHistory (not PricePoint): docs/plans/phase2-price-history.md T-10
+    で定義された正式名称。OpenAPI スキーマ名として公開される。
+    """
+    price: int
+    points: int
+
+
+class PriceHistoryEntry(BaseModel):
+    """特定日の全サイト価格推移。
+
+    Why dictionary format:
+        charts (recharts) expect an array of objects where each key is a line
+        to be plotted.
+    """
+    date: date
+    # Key is SiteType value (amazon, rakuten, yahoo)
+    sites: Dict[str, SiteHistory]
+
+
+class ProductHistoryResponse(BaseModel):
+    """価格履歴APIのトップレベルレスポンス。"""
+    product_id: uuid.UUID = Field(serialization_alias="productId")
+    histories: List[PriceHistoryEntry]

@@ -1286,9 +1286,14 @@ class TestEndpointPersonalizationBehavior:
 
         期待値の根拠 (engine.calculate_points_rakuten より):
             ストア 1%     = floor(1000 * 0.01) = 10 pt
-            カード基本 1% = floor(1000 * 1.0/100) = 10 pt  (card_base_rate=1.0 default)
-            total         = 20 pt
-            effective     = max(0, 1000 + 0 - 20) = 980 円
+            カード基本 0% = floor(1000 * 0.0/100) = 0 pt  (カードなし: card_base_rate=0.0)
+            total         = 10 pt
+            effective     = max(0, 1000 + 0 - 10) = 990 円
+
+        Why 0% (not 1%):
+            commit 8a22d71「カード未設定時のcard_base_rateデフォルト値を0%に修正」に
+            より、カード未設定時の card_base_rate は 0.0 に変更された。
+            tests/unit/pricing/test_engine.py も同様に 10pt へ更新済み。
         """
         # Given: profile with no default card, rakuten site product
         product = make_product(name="apple", current_price=1000)
@@ -1314,10 +1319,10 @@ class TestEndpointPersonalizationBehavior:
             headers=_auth_header(auth_token["token"]),
         )
 
-        # Then: points calculated with card_base_rate=1.0 (no special rewards)
+        # Then: points calculated with card_base_rate=0.0 (no card, only store base)
         listing = response.json()["items"][0]["listings"][0]
-        assert listing["points"] == 20
-        assert listing["effectivePrice"] == 980
+        assert listing["points"] == 10
+        assert listing["effectivePrice"] == 990
 
     def test_zero_results_authenticated_should_return_applied_true(
         self, client, db_session, auth_token

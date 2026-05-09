@@ -18,7 +18,7 @@ import time
 from collections.abc import Sequence
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
 from ..common.database import get_db
@@ -29,6 +29,7 @@ from ..repositories.products import (
     PAGE_SIZE,
     SearchParams,
     SortKey,
+    get_product_history,
     search_products,
 )
 from ..repositories.user_profiles import get_profile_by_user_id
@@ -36,9 +37,12 @@ from ..schemas import (
     BreakdownEntry,
     ListingOut,
     PersonalizationMeta,
+    PriceHistoryEntry,
+    ProductHistoryResponse,
     ProductSearchEnvelope,
     ProductSummary,
     SearchMeta,
+    SiteHistory,
 )
 
 logger = logging.getLogger(__name__)
@@ -205,3 +209,45 @@ def search_products_endpoint(
             card = profile.default_card  # joinedload 済み（追加クエリなし）
 
     return _build_envelope(items, page=page, total_count=total_count, profile=profile, card=card)
+
+
+@router.get(
+    "/{id}/history",
+    response_model=ProductHistoryResponse,
+    response_model_by_alias=True,
+)
+def get_product_history_endpoint(
+    product_id: str = Path(..., alias="id"),
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+) -> ProductHistoryResponse:
+    """特定商品の価格履歴を取得する。
+
+    ID (UUID) または JANコードで商品を特定し、過去指定日数の価格推移を
+    日付・サイトごとにグルーピングして返却する。
+    """
+    result = get_product_history(db, product_id, days)
+    if not result:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    resolved_id, histories = result
+
+    # グルーピング: 日付 -> サイト -> 価格情報
+    # フロントエンド（recharts）で扱いやすいよう、日付ごとのオブジェクトにまとめる。
+    grouped: dict[str, dict[str, SiteHistory]] = {}
+    for h in histories:
+        date_str = h.recorded_at.date().isoformat()
+        site_type = h.ec_site_product.site_type.value
+
+        if date_str not in grouped:
+            grouped[date_str] = {}
+
+        grouped[date_str][site_type] = SiteHistory(price=h.price, points=h.points)
+
+    # レスポンス形式に変換（日付昇順）
+    history_entries = [
+        PriceHistoryEntry(date=d, sites=s)
+        for d, s in sorted(grouped.items())
+    ]
+
+    return ProductHistoryResponse(product_id=resolved_id, histories=history_entries)
