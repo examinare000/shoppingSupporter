@@ -15,13 +15,17 @@ alias convention.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date, datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from .common.models import RakutenRank
+
+# YYYY-MM 形式の正規表現。1 箇所で定義し、validator と router 両方から参照できるようにする。
+_MONTH_FORMAT_PATTERN = re.compile(r"^\d{4}-\d{2}$")
 
 
 class BreakdownEntry(BaseModel):
@@ -237,3 +241,64 @@ class ProductHistoryResponse(BaseModel):
     """価格履歴APIのトップレベルレスポンス。"""
     product_id: uuid.UUID = Field(serialization_alias="productId")
     histories: List[PriceHistoryEntry]
+
+
+# ---------------------------------------------------------------------------
+# Monthly usage schemas (T-17)
+# ---------------------------------------------------------------------------
+
+class MonthlyUsageSiteEntry(BaseModel):
+    """GET /api/me/usage レスポンスの 1 サイト分エントリ。
+
+    Why from_attributes=False（デフォルト）:
+        ルーター側で ORM MonthlyUsage から手動マッピングする（ListingOut と同パターン）。
+        ORM enum の value（小文字）を site フィールドに明示的に渡す。
+    """
+    site: str
+    amount_spent: int = Field(serialization_alias="amountSpent")
+    points_earned: int = Field(serialization_alias="pointsEarned")
+    shop_count: int = Field(serialization_alias="shopCount")
+
+
+class MonthlyUsageResponse(BaseModel):
+    """GET /api/me/usage のレスポンス（当月全サイト）。"""
+    month: str
+    items: List[MonthlyUsageSiteEntry]
+
+
+class MonthlyUsageUpdate(BaseModel):
+    """PUT /api/me/usage のリクエストボディ。全フィールド必須・全置換 UPSERT。
+
+    Why extra="forbid":
+        GET レスポンスの形（month + items のネスト）を PUT body に流用するバグを
+        検出する（ADR-013 §2 / UserProfileUpdate と同パターン）。
+    Why Literal["amazon", "rakuten", "yahoo"]:
+        wire format は小文字 value 固定。大文字（"AMAZON"）や不正値は 422 で弾く。
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    site: Literal["amazon", "rakuten", "yahoo"]
+    month: str
+    amount_spent: int = Field(ge=0, validation_alias="amountSpent")
+    points_earned: int = Field(ge=0, validation_alias="pointsEarned")
+    shop_count: int = Field(ge=0, validation_alias="shopCount")
+
+    @field_validator("month")
+    @classmethod
+    def validate_month_format(cls, v: str) -> str:
+        if not _MONTH_FORMAT_PATTERN.match(v):
+            raise ValueError("month must be in YYYY-MM format (e.g. 2026-05)")
+        return v
+
+
+class MonthlyUsageItemResponse(BaseModel):
+    """PUT /api/me/usage のレスポンス（1 件）。
+
+    Why month を含む:
+        PUT は特定サイト×特定月を全置換するため、確認応答として month を返す。
+    """
+    site: str
+    month: str
+    amount_spent: int = Field(serialization_alias="amountSpent")
+    points_earned: int = Field(serialization_alias="pointsEarned")
+    shop_count: int = Field(serialization_alias="shopCount")

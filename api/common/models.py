@@ -15,7 +15,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -35,6 +35,11 @@ class SiteType(enum.Enum):
     AMAZON = "amazon"
     RAKUTEN = "rakuten"
     YAHOO = "yahoo"
+
+
+class CampaignKind(enum.Enum):
+    RECURRING = "recurring"
+    ONESHOT = "oneshot"
 
 
 class User(Base):
@@ -136,3 +141,48 @@ class PriceHistory(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     ec_site_product: Mapped["EcSiteProduct"] = relationship(back_populates="price_histories")
+
+
+class SaleCampaign(Base):
+    """セールキャンペーン定義。bonus/cap/conditions は JSONB として格納する。
+
+    Why JSONB: キャンペーン条件はスキーマが多様で拡張頻度が高い。JSONB にすることで
+    スキーマ変更なしに新しい条件タイプを追加できる（phase3-analytics-suggestion.md §3.1）。
+    """
+    __tablename__ = "sale_campaigns"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    site: Mapped[SiteType] = mapped_column(Enum(SiteType, create_constraint=False, name="sitetype"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[CampaignKind] = mapped_column(Enum(CampaignKind, create_constraint=False, name="campaignkind"), nullable=False)
+    recurrence_rule: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    start_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    end_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    bonus: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    cap: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    conditions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+
+class MonthlyUsage(Base):
+    """月次利用実績。複合 PK (user_id, site, recorded_month) で 1 ユーザー × 1 サイト × 1 月を表す。
+
+    Why 複合 PK: 月はリセット単位であり、同月内は UPSERT で上書きする。
+    新月は自然に新レコードとして挿入される（phase3-analytics-suggestion.md §3.2）。
+    """
+    __tablename__ = "monthly_usage"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    site: Mapped[SiteType] = mapped_column(
+        Enum(SiteType, create_constraint=False, name="sitetype"),
+        primary_key=True,
+    )
+    # Why String: YYYY-MM 形式の固定フォーマット文字列。Date 型より比較が単純で
+    # フロントエンドへの wire format (文字列) と同形のため一貫性が高い。
+    recorded_month: Mapped[str] = mapped_column(String(7), primary_key=True)
+    amount_spent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    points_earned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    shop_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

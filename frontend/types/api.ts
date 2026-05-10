@@ -159,6 +159,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description 認証ユーザー自身の当月利用実績を全サイト分返す。
+         *
+         *     未保存のサイトは 200 + 0 デフォルトを返す（404 ではない）。
+         *     profile GET と同パターン（docs/plans/phase3-analytics-suggestion.md §3.2）。
+         */
+        get: operations["get_usage_api_me_usage_get"];
+        /**
+         * Update Usage
+         * @description 指定サイト×月の利用実績を全置換 UPSERT する。
+         *
+         *     同一 (site, month) への再 PUT は値を上書きする（INSERT されない）。
+         */
+        put: operations["update_usage_api_me_usage_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -267,6 +296,78 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * MonthlyUsageItemResponse
+         * @description PUT /api/me/usage のレスポンス（1 件）。
+         *
+         *     Why month を含む:
+         *         PUT は特定サイト×特定月を全置換するため、確認応答として month を返す。
+         */
+        MonthlyUsageItemResponse: {
+            /** Site */
+            site: string;
+            /** Month */
+            month: string;
+            /** Amountspent */
+            amountSpent: number;
+            /** Pointsearned */
+            pointsEarned: number;
+            /** Shopcount */
+            shopCount: number;
+        };
+        /**
+         * MonthlyUsageResponse
+         * @description GET /api/me/usage のレスポンス（当月全サイト）。
+         */
+        MonthlyUsageResponse: {
+            /** Month */
+            month: string;
+            /** Items */
+            items: components["schemas"]["MonthlyUsageSiteEntry"][];
+        };
+        /**
+         * MonthlyUsageSiteEntry
+         * @description GET /api/me/usage レスポンスの 1 サイト分エントリ。
+         *
+         *     Why from_attributes=False（デフォルト）:
+         *         ルーター側で ORM MonthlyUsage から手動マッピングする（ListingOut と同パターン）。
+         *         ORM enum の value（小文字）を site フィールドに明示的に渡す。
+         */
+        MonthlyUsageSiteEntry: {
+            /** Site */
+            site: string;
+            /** Amountspent */
+            amountSpent: number;
+            /** Pointsearned */
+            pointsEarned: number;
+            /** Shopcount */
+            shopCount: number;
+        };
+        /**
+         * MonthlyUsageUpdate
+         * @description PUT /api/me/usage のリクエストボディ。全フィールド必須・全置換 UPSERT。
+         *
+         *     Why extra="forbid":
+         *         GET レスポンスの形（month + items のネスト）を PUT body に流用するバグを
+         *         検出する（ADR-013 §2 / UserProfileUpdate と同パターン）。
+         *     Why Literal["amazon", "rakuten", "yahoo"]:
+         *         wire format は小文字 value 固定。大文字（"AMAZON"）や不正値は 422 で弾く。
+         */
+        MonthlyUsageUpdate: {
+            /**
+             * Site
+             * @enum {string}
+             */
+            site: "amazon" | "rakuten" | "yahoo";
+            /** Month */
+            month: string;
+            /** Amountspent */
+            amountSpent: number;
+            /** Pointsearned */
+            pointsEarned: number;
+            /** Shopcount */
+            shopCount: number;
         };
         /**
          * PersonalizationMeta
@@ -777,6 +878,86 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_usage_api_me_usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyUsageResponse"];
+                };
+            };
+            /** @description Missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_usage_api_me_usage_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonthlyUsageUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyUsageItemResponse"];
+                };
+            };
+            /** @description Missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
