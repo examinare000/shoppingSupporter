@@ -19,6 +19,7 @@ Why この段階では ImportError が想定内か:
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 # Why: implement ステップで api/schemas.py の PricePoint が SiteHistory に
 # リネームされるまで、この import は ImportError になる（想定内の Red）。
@@ -63,7 +64,7 @@ class TestPriceHistoryEntrySchema:
         )
 
         # Then
-        assert entry.date == "2026-05-01"
+        assert entry.date == date(2026, 5, 1)
         assert entry.sites["amazon"].price == 1000
         assert entry.sites["amazon"].points == 10
 
@@ -87,7 +88,7 @@ class TestPriceHistoryEntrySchema:
         # 履歴はあるが該当日のレコードがない場合は空辞書が渡り得る
         entry = PriceHistoryEntry(date="2026-05-01", sites={})
 
-        assert entry.date == "2026-05-01"
+        assert entry.date == date(2026, 5, 1)
         assert entry.sites == {}
 
 
