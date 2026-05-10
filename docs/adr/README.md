@@ -17,3 +17,4 @@
 - [ADR-011: testcontainers と Alembic を活用したインテグレーションテスト戦略](011-integration-testing-strategy.md)
 - [ADR-012: OpenAPI スキーマを活用したフロントエンド型同期戦略](012-openapi-type-sync-strategy.md)
 - [ADR-013: API スキーマ契約規約（Pydantic v2 ベース）](013-api-schema-conventions.md)
+- [ADR-014: Phase 3-a キャンペーンモデルと月次利用実績管理の設計](014-phase3a-campaign-and-usage-architecture.md)
