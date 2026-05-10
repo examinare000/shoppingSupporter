@@ -47,15 +47,16 @@
 
 ## 4. 詳細タスクリスト
 
-### Phase 3-a: 基盤整備と利用実績 API
-- [ ] **T-16: セールカレンダー・利用実績のモデル定義とマイグレーション**
-  - `api/common/models.py` への追加。
-  - Alembic によるテーブル作成。
-- [ ] **T-17: 利用実績 API (`GET / PUT /api/me/usage`)**
-  - ユーザーが自身の利用実績を管理するためのエンドポイント。
-  - 月境界での自動リセット（または新規作成）ロジック。
-- [ ] **T-18: PricingEngine の拡張**
-  - `api/lib/pricing/engine.py` の `compute_pricing` を拡張し、`MonthlyUsage` と `SaleCampaign` を考慮した上限計算・セール加算を実装。
+### Phase 3-a: 基盤整備と利用実績 API ✅ 完了 (2026-05-10)
+- [x] **T-16: セールカレンダー・利用実績のモデル定義とマイグレーション**
+  - `api/common/models.py` に `CampaignKind` enum, `SaleCampaign`, `MonthlyUsage` を追加。
+  - Alembic マイグレーションでテーブル作成。
+- [x] **T-17: 利用実績 API (`GET / PUT /api/me/usage`)**
+  - `api/routers/usage.py` を実装。未記録サイトは 200 + 0 デフォルト返却。
+  - 月境界は `recorded_month = "YYYY-MM"` の複合 PK + UPSERT で管理。
+- [x] **T-18: PricingEngine の拡張**
+  - `api/lib/pricing/engine.py` の `compute_pricing` に `campaigns` / `usage` 引数を追加。
+  - 上限到達時のポイントカット・セール加算を実装（詳細は ADR-014）。
 
 ### Phase 3-b: サジェストエンジン実装
 - [ ] **T-19: 価格予測ロジックの実装**
@@ -74,12 +75,6 @@
 - **Suggestion API (Integration)**: 特定のユーザー状態・履歴状態において、意図した推奨アクションが返るか。
 
 ## 6. スケジュール（目安）
-- Phase 3-a (基盤・API): 3 days
-- Phase 3-b (ロジック・UI): 4 days
-- 結合テスト・調整: 1 day
-�。
-
-## 6. スケジュール（目安）
-- Phase 3-a (基盤・API): 3 days
-- Phase 3-b (ロジック・UI): 4 days
+- Phase 3-a (基盤・API): ✅ 完了 (2026-05-10)
+- Phase 3-b (ロジック・UI): 4 days（未着手）
 - 結合テスト・調整: 1 day
