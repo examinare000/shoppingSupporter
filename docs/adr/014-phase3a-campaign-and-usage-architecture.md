@@ -18,7 +18,7 @@ EC サイトのポイント還元率は、ユーザーの月次利用状況（�
 
 `bonus` / `cap` / `conditions` の 3 カラムを `JSONB` 型とする。
 
-```
+```text
 SaleCampaign
 ├── id            UUID PK
 ├── site          Enum(SiteType)
@@ -44,7 +44,7 @@ SaleCampaign
 
 ユーザーが手動で当月利用実績を入力する方式とし、スクレイピングや公式 API による自動取得は行わない。
 
-```
+```text
 MonthlyUsage
 ├── user_id         UUID PK, FK → users.id
 ├── site            Enum(SiteType) PK

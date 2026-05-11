@@ -41,18 +41,14 @@
 - [x] F-19 / T-17: 利用実績（マラソン店舗数等）の手動入力機能 — `GET/PUT /api/me/usage`
 - [x] T-18: PricingEngine の拡張（キャンペーン割引・ポイント倍率上限計算）
 
-#### Phase 3-b: サジェストエンジン実装 (未着手)
-- [ ] T-19: 価格予測ロジック (`api/lib/pricing/forecaster.py` — 移動平均・中央値)
-- [ ] T-20: サジェスト API (`GET /api/products/{id}/suggestion`)
-- [ ] T-21 / F-20: フロントエンド サジェスト表示（`ProductDossier` 統合）
+#### Phase 3-b: サジェストエンジン実装 (完了)
+- [x] T-19: 価格予測ロジック (`api/lib/pricing/forecaster.py` — 移動平均・中央値) — 実装済み
+- [x] T-20: サジェスト API (`GET /api/products/{id}/suggestion`) — エンドポイント追加済み
+- [x] T-21 / F-20: フロントエンド サジェスト表示（`ProductDossier` 統合） — `SuggestionSection` コンポーネント実装済み
 
 ## 3. 残タスク・アクションアイテム（直近）
 
-Phase 1〜3-a のタスクはすべて完了。次のアクションは Phase 3-b の着手。
-
-1. **価格予測ロジックの実装 (T-19)**: `api/lib/pricing/forecaster.py` を新規作成し、直近 30/90 日の移動平均・中央値による価格推移推定を実装する。
-2. **サジェスト API の実装 (T-20)**: `GET /api/products/{id}/suggestion` で現在実質価格と次回セール時期待価格を比較し、推奨アクションと根拠を返す。
-3. **フロントエンド サジェスト UI の実装 (T-21)**: `ProductDossier` にサジェストセクションを追加し、期待節約額を表示する。
+Phase 1〜3-b のタスクはすべて完了。次のアクションは Phase 4 の検討。
 
 ## 4. 参照ドキュメント
 
