@@ -89,7 +89,7 @@ def get_profile(
     response_model_by_alias=True,
     responses={
         status.HTTP_401_UNAUTHORIZED: {"description": "Missing or invalid JWT"},
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": DEFAULT_CARD_NOT_FOUND_MESSAGE},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": DEFAULT_CARD_NOT_FOUND_MESSAGE},
     },
 )
 def update_profile(
@@ -120,7 +120,7 @@ def update_profile(
         db, payload.default_card_id
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=DEFAULT_CARD_NOT_FOUND_MESSAGE,
         )
     return upsert_profile(
