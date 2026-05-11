@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from .common.models import RakutenRank
 
 # YYYY-MM 形式の正規表現。1 箇所で定義し、validator と router 両方から参照できるようにする。
-_MONTH_FORMAT_PATTERN = re.compile(r"^\d{4}-\d{2}$")
+_MONTH_FORMAT_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 class BreakdownEntry(BaseModel):
@@ -337,27 +337,30 @@ class SuggestionResponse(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_wait_fields(self) -> "SuggestionResponse":
-        """action='wait' のとき、Optional フィールドすべてに値が設定されることを保証する。
+    def _validate_action_fields(self) -> "SuggestionResponse":
+        """action と Optional フィールドの不変条件を強制する。
 
         Why このバリデーターが必要か:
-            docstring の不変条件「wait のとき Optional フィールドすべてに値が設定される」を
-            コードレベルで強制する。個々のフィールドが None でも Pydantic は通過させるため、
+            docstring の不変条件「wait のとき Optional フィールドすべてに値が設定される」「buy_now
+            のとき Optional フィールドはすべて None」をコードレベルで強制する。
             cross-field バリデーションとして model_validator で一括チェックする。
         """
+        _optional_fields = [
+            ("expected_sale_effective_price", self.expected_sale_effective_price),
+            ("estimated_saving", self.estimated_saving),
+            ("next_sale_date", self.next_sale_date),
+            ("next_sale_campaign", self.next_sale_campaign),
+        ]
         if self.action == "wait":
-            missing = [
-                field
-                for field, value in [
-                    ("expected_sale_effective_price", self.expected_sale_effective_price),
-                    ("estimated_saving", self.estimated_saving),
-                    ("next_sale_date", self.next_sale_date),
-                    ("next_sale_campaign", self.next_sale_campaign),
-                ]
-                if value is None
-            ]
+            missing = [f for f, v in _optional_fields if v is None]
             if missing:
                 raise ValueError(
                     f"action='wait' のとき次のフィールドは必須です: {', '.join(missing)}"
+                )
+        elif self.action == "buy_now":
+            non_null = [f for f, v in _optional_fields if v is not None]
+            if non_null:
+                raise ValueError(
+                    f"action='buy_now' のとき次のフィールドは None でなければなりません: {', '.join(non_null)}"
                 )
         return self
