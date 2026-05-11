@@ -19,9 +19,9 @@ Vercel へのデプロイに最適化されたサーバーレス構成。
 
 ## 現在の進捗
 
-- フロントエンド UI（ヒーロー検索 / 検索結果 / 画像優先度設定）は実装済み
-- バックエンド: モデル定義・公式 API クライアント・Cron・検索 API・認証基盤・カードマスタ API・UserProfile API・ポイント算出エンジン（T-06）・検索 API への UserProfile / Card 統合（T-08）・OpenAPI → TypeScript 型生成パイプライン（T-09）を実装済み
-- **Phase 1 完了**。**Next Step**: Phase 2（価格履歴の可視化）。詳細は `docs/plans/roadmap.md` を参照
+- フロントエンド UI（ヒーロー検索 / 検索結果 / 価格推移チャート / サジェスト表示）は実装済み
+- バックエンド: モデル定義・公式 API クライアント・Cron・検索 API・認証基盤・カードマスタ API・UserProfile API・ポイント算出エンジン・価格履歴 API・サジェストエンジンを実装済み
+- **Phase 1〜3 完了**。**Next Step**: Phase 4（自動データ取得の高度化 / 外部連携）。詳細は `docs/plans/roadmap.md` を参照
 
 ## 今後のロードマップ
 

@@ -22,24 +22,24 @@
 
 ## 3. 詳細タスクリスト
 
-### Phase 2-a: バックエンド基盤整備
-- [ ] **T-10: スキーマ定義の追加 (`api/schemas.py`)**
+### Phase 2-a: バックエンド基盤整備 ✅ 完了 (2026-05-08)
+- [x] **T-10: スキーマ定義の追加 (`api/schemas.py`)**
   - `PriceHistoryEntry`, `SiteHistory`, `ProductHistoryResponse` の定義。
   - `recorded_at` の camelCase (recordedAt) 対応。
-- [ ] **T-11: リポジトリ実装 (`api/repositories/products.py`)**
+- [x] **T-11: リポジトリ実装 (`api/repositories/products.py`)**
   - `get_product_history(db, product_id, days)` 関数の実装。
   - SQL で `DISTINCT ON (date_trunc('day', recorded_at))` 等を用いたダウンサンプリング。
-- [ ] **T-12: ルーター実装 (`api/routers/products.py`)**
+- [x] **T-12: ルーター実装 (`api/routers/products.py`)**
   - `GET /api/products/{id}/history` エンドポイントの追加。
   - JANコードまたは UUID の両方を受け入れ可能なバリデーション。
 
-### Phase 2-b: フロントエンド実装
-- [ ] **T-13: チャートライブラリ導入**
+### Phase 2-b: フロントエンド実装 ✅ 完了 (2026-05-09)
+- [x] **T-13: チャートライブラリ導入**
   - `npm install recharts`
-- [ ] **T-14: チャートコンポーネント作成 (`frontend/components/results/PriceChart.tsx`)**
+- [x] **T-14: チャートコンポーネント作成 (`frontend/components/results/PriceChart.tsx`)**
   - エディトリアルデザイン（Newsreader/JetBrains Mono）の適用。
   - 単色またはアクセントカラー（芥子色）を用いた配色。
-- [ ] **T-15: 商品詳細ページへの統合**
+- [x] **T-15: 商品詳細ページへの統合**
   - `ProductDossier` コンポーネント等にチャートを組み込み。
   - `useSWR` による API 連携。
 
@@ -61,6 +61,6 @@
 - **活字**: 軸ラベルには `JetBrains Mono` を使用し、テクニカルな印象を与える。
 
 ## 6. スケジュール（目安）
-- バックエンド実装: 2 days
-- フロントエンド実装: 3 days
-- テスト・リファクタリング: 1 day
+- バックエンド実装: ✅ 完了 (2026-05-08)
+- フロントエンド実装: ✅ 完了 (2026-05-09)
+- テスト・リファクタリング: ✅ 完了 (2026-05-09)
