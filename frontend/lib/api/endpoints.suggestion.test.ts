@@ -44,6 +44,7 @@ describe('buildSuggestionUrl', () => {
     // スラッシュがそのまま残るとパス構造が壊れる
     // encodeURIComponent により %2F にエンコードされることを期待
     expect(url).not.toMatch(/\/prod\/with\/slash\//);
+    expect(url).toContain('%2F');
   });
 
   it('エンドポイントパスは /api/products/{id}/suggestion の形式', () => {
