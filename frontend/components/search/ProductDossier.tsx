@@ -10,6 +10,7 @@ import { RuledDivider } from '@/components/editorial/RuledDivider';
 import { ProductThumbnail } from '@/components/results/ProductThumbnail';
 import PriceChart from '@/components/results/PriceChart';
 import { ListingRow } from './ListingRow';
+import { SuggestionSection } from './SuggestionSection';
 
 type ProductHistoryResponse = components['schemas']['ProductHistoryResponse'];
 
@@ -102,6 +103,7 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
         ) : (
           <div className="w-full h-32 animate-pulse bg-paper-high" />
         )}
+        <SuggestionSection productId={product.id} />
       </div>
 
       <div className="mt-6">
