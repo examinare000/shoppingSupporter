@@ -12,6 +12,7 @@ build_campaign_infos をここでテストする理由:
 """
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -84,7 +85,7 @@ class TestDataclasses:
         info = _make_campaign_info(
             recurrence_rule={"type": "day_of_month", "days": [5]},
         )
-        with pytest.raises(Exception):  # dataclasses.FrozenInstanceError (subclass of AttributeError)
+        with pytest.raises(dataclasses.FrozenInstanceError):
             info.name = "変更"  # type: ignore
 
     def test_price_stats_is_frozen(self):
@@ -97,7 +98,7 @@ class TestDataclasses:
             avg_30d=10000.0,
             avg_90d=10000.0,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             stats.median = 2000.0  # type: ignore
 
     def test_upcoming_sale_is_frozen(self):
@@ -106,7 +107,7 @@ class TestDataclasses:
             estimated_date=date(2026, 5, 15),
             bonus_rate=0.10,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             sale.bonus_rate = 0.20  # type: ignore
 
 

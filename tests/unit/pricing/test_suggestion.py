@@ -14,6 +14,7 @@ Why ユニットテストで網羅するか:
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 from datetime import date
 
@@ -69,7 +70,7 @@ class TestSuggestionInputDataclass:
             price_stats=None,
             upcoming_sales=[],
         )
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(dataclasses.FrozenInstanceError):
             inp.current_best_price = 9000  # type: ignore
 
 
