@@ -37,6 +37,18 @@ const productEarbuds: Product = {
   ],
 };
 
+/** buy_now アクションのサジェストレスポンスフィクスチャ */
+const suggestionBuyNow = {
+  productId: 'p-001',
+  action: 'buy_now',
+  rationale: '現在が最安値です',
+  currentBestEffectivePrice: 12672,
+  expectedSaleEffectivePrice: null,
+  estimatedSaving: null,
+  nextSaleDate: null,
+  nextSaleCampaign: null,
+};
+
 /** envelope 形式の成功レスポンスヘルパー */
 function makeEnvelope(items: Product[]): ProductSearchEnvelope {
   return {
@@ -130,7 +142,10 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
 
   it('検索 → 成功時: ヒット件数表示と該当商品の article が描画される', async () => {
     // Given: バックエンドが ProductSearchEnvelope 形式で返す
-    fetchMock.mockResolvedValueOnce(jsonResponse(makeEnvelope([productEarbuds])));
+    // SuggestionSection も fetch するため: 1回目=検索, 2回目=サジェスト
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(makeEnvelope([productEarbuds])))
+      .mockResolvedValueOnce(jsonResponse(suggestionBuyNow));
     const user = userEvent.setup();
     renderHome();
 
@@ -146,8 +161,8 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
       within(articles[0]!).getByRole('heading', { level: 2 }),
     ).toHaveTextContent(/ワイヤレスイヤホン Pro X3/);
 
-    // fetcher が searchClient 経由で 1 回だけ走る
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 検索 1 回 + 商品ごとのサジェスト 1 回 = 計 2 回 fetch されている
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('envelope の items を商品リストとして表示する（envelope オブジェクト直接ではなく items を使う）', async () => {
@@ -192,9 +207,11 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
   });
 
   it('リトライボタン押下で再 fetch され、2 回目の成功で結果が描画される', async () => {
+    // SuggestionSection も fetch するため: 1回目=検索失敗, 2回目=リトライ検索, 3回目=サジェスト
     fetchMock
       .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValueOnce(jsonResponse(makeEnvelope([productEarbuds])));
+      .mockResolvedValueOnce(jsonResponse(makeEnvelope([productEarbuds])))
+      .mockResolvedValueOnce(jsonResponse(suggestionBuyNow));
 
     const user = userEvent.setup();
     renderHome();
@@ -208,8 +225,8 @@ describe('HomePage（API 接続版・SWR 経由）', () => {
     // 2 回目の応答が反映され、結果セクションが描画される（現ページ 1 件）
     expect(await screen.findByText(/Hits 1 件/)).toBeInTheDocument();
     expect(screen.getAllByRole('article')).toHaveLength(1);
-    // 1 回目（失敗） + リトライ（成功） = 計 2 回 fetch されている
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // 1 回目（失敗） + リトライ（成功） + サジェスト 1 件 = 計 3 回 fetch されている
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     // エラー画面は再描画後に消える
     expect(
       screen.queryByRole('button', { name: /リトライ/ }),
