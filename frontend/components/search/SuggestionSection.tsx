@@ -35,7 +35,21 @@ async function fetcher(url: string): Promise<Suggestion> {
 
 export function SuggestionSection({ productId }: SuggestionSectionProps) {
   const url = buildSuggestionUrl(productId);
-  const { data } = useSWR<Suggestion>(url, fetcher);
+  const { data, error, mutate } = useSWR<Suggestion>(url, fetcher);
+
+  if (error) {
+    return (
+      <div data-testid="suggestion-error" className="mt-4">
+        <p className="text-sm text-red-600">サジェストの取得に失敗しました。</p>
+        <button
+          onClick={() => mutate()}
+          className="text-sm text-blue-600 underline mt-1"
+        >
+          再試行
+        </button>
+      </div>
+    );
+  }
 
   // ローディング中: スケルトン表示
   if (!data) {
@@ -66,12 +80,14 @@ export function SuggestionSection({ productId }: SuggestionSectionProps) {
       <p className="mt-2 text-sm text-ink-muted">{data.rationale}</p>
 
       {/* wait 時のみ: 予想節約額・次回セール日 */}
-      {!isBuyNow && data.estimatedSaving != null && (
+      {!isBuyNow && (
         <dl className="mt-3 space-y-1 text-sm">
-          <div className="flex gap-2">
-            <dt className="text-ink-muted">予想節約額</dt>
-            <dd className="font-semibold">{formatYen(data.estimatedSaving)}</dd>
-          </div>
+          {data.estimatedSaving != null && (
+            <div className="flex gap-2">
+              <dt className="text-ink-muted">予想節約額</dt>
+              <dd className="font-semibold">{formatYen(data.estimatedSaving)}</dd>
+            </div>
+          )}
           {data.nextSaleDate != null && (
             <div className="flex gap-2">
               <dt className="text-ink-muted">次回セール日</dt>
