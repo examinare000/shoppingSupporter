@@ -23,3 +23,25 @@ export interface ResolvedImage {
 }
 
 export type SortKey = 'effectivePriceAsc' | 'priceAsc' | 'pointRateDesc';
+
+/**
+ * GET /api/products/{id}/suggestion のレスポンス型。
+ *
+ * action が "buy_now" のとき Optional フィールドはすべて null。
+ * action が "wait" のとき Optional フィールドに値が設定される。
+ *
+ * Why手書きか:
+ *   SuggestionResponse は Phase3-b で追加された新エンドポイント。
+ *   OpenAPI スキーマ（api.ts）の自動再生成が完了するまでの間、
+ *   フロント固有型として手書きで管理する。
+ */
+export interface Suggestion {
+  productId: string;
+  action: 'buy_now' | 'wait';
+  rationale: string;
+  currentBestEffectivePrice: number | null;
+  expectedSaleEffectivePrice: number | null;
+  estimatedSaving: number | null;
+  nextSaleDate: string | null;
+  nextSaleCampaign: string | null;
+}

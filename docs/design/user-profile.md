@@ -87,6 +87,11 @@ class UserProfileResponse(BaseModel):
     updated_at: Optional[datetime] = Field(serialization_alias="updatedAt")
 ```
 
+### 3.4. 利用実績の統合 (Phase 3 拡張)
+Phase 3 では、プロフィールページに「当月の利用実績」入力 UI を設ける。これに伴い、以下のエンドポイントを追加/拡張する。
+- **`GET /api/me/usage`**: 当月のサイト別利用額・ポイント獲得状況を取得する。
+- **`PUT /api/me/usage`**: 利用実績を更新する。プロフィール更新 (`PUT /api/me/profile`) とはエンドポイントを分離し、頻繁な更新（買い物直後の入力など）に対応する。
+
 ## 4. 実装上の留意点
 
 ### 4.1. リポジトリ層の責務

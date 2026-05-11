@@ -4,15 +4,20 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from api.common.models import Card as OrmCard
+    from api.common.models import MonthlyUsage as OrmMonthlyUsage
+    from api.common.models import SaleCampaign as OrmSaleCampaign
     from api.common.models import UserProfile as OrmUserProfile
 
 from .engine import (
+    ActiveCampaign,
     PricingResult,
     RakutenRank,
     RewardEntry,
     SiteType,
     UserContext,
+    UsageContext,
 )
+from .forecaster import CampaignInfo
 
 
 def build_context(
@@ -38,31 +43,117 @@ def build_context(
     )
 
 
+def build_active_campaigns(
+    orm_campaigns: "list[OrmSaleCampaign]",
+) -> list[ActiveCampaign]:
+    """ORM SaleCampaign リストを engine 層の ActiveCampaign リストに変換する。
+
+    Why このアダプターが必要か: engine.py は ORM 非依存を維持する。
+    ORM モデルの SiteType と engine の SiteType は同じ値体系（小文字 value）を
+    持つが、型が異なるため変換が必要（pricing-engine.md §1）。
+    """
+    result: list[ActiveCampaign] = []
+    for c in orm_campaigns:
+        # Why SiteType(c.site.value): ORM SiteType.AMAZON.value="amazon" →
+        # engine SiteType("amazon") = engine SiteType.AMAZON
+        engine_site = SiteType(c.site.value)
+        result.append(ActiveCampaign(
+            site=engine_site,
+            name=c.name,
+            bonus=c.bonus,
+            cap=c.cap,
+        ))
+    return result
+
+
+def build_campaign_infos(
+    orm_campaigns: "list[OrmSaleCampaign]",
+) -> list[CampaignInfo]:
+    """ORM SaleCampaign リストを forecaster 層の CampaignInfo リストに変換する。
+
+    Why build_active_campaigns と対称的に定義するか:
+        build_active_campaigns が engine.ActiveCampaign を生成するのと対称的に、
+        このアダプターは forecaster.CampaignInfo を生成する。
+        ORM モデルの SiteType と engine の SiteType は同じ値体系（小文字 value）を
+        持つが、型が異なるため変換が必要。
+    """
+    result: list[CampaignInfo] = []
+    for c in orm_campaigns:
+        engine_site = SiteType(c.site.value)
+        bonus_rate = c.bonus.get("rate", 0.0) if c.bonus else 0.0
+        result.append(CampaignInfo(
+            site=engine_site,
+            name=c.name,
+            # Enum.value で文字列化（"recurring" / "oneshot"）
+            kind=c.kind.value,
+            recurrence_rule=c.recurrence_rule,
+            bonus_rate=bonus_rate,
+        ))
+    return result
+
+
+def build_usage_context(
+    orm_records: "list[OrmMonthlyUsage]",
+    site: SiteType,
+) -> UsageContext | None:
+    """ORM MonthlyUsage リストから指定サイトの UsageContext を返す。
+
+    指定サイトのレコードが存在しない場合は None を返す。
+    None は「利用実績不明」を意味し、キャンペーン上限チェックをスキップする
+    （安全側として全額適用する）。
+    """
+    for record in orm_records:
+        if record.site.value == site.value:
+            return UsageContext(
+                site=site,
+                amount_spent=record.amount_spent,
+                points_earned=record.points_earned,
+                shop_count=record.shop_count,
+            )
+    return None
+
+
 def compute_pricing(
     price: int,
     shipping: int,
     site: SiteType,
     profile: "OrmUserProfile | None" = None,
     card: "OrmCard | None" = None,
+    campaigns: "list[OrmSaleCampaign] | None" = None,
+    usage_records: "list[OrmMonthlyUsage] | None" = None,
 ) -> PricingResult:
     """T-08 から呼ばれる公開インターフェース。
 
     profile=None, card=None のとき UserContext デフォルト（ゲスト状態）で計算。
+    campaigns=None / usage_records=None は後方互換（既存呼び出しに影響なし）。
     """
     # Why ローカルimport: calculate_effective_price をパッケージ名前空間に露出させない。
     # 外部から直接呼び出すと build_context によるORM変換層をバイパスできてしまう。
     from .engine import calculate_effective_price
 
     context = build_context(profile, card)
-    return calculate_effective_price(site, price, shipping, context)
+    active_campaigns = build_active_campaigns(campaigns) if campaigns is not None else []
+    usage_context = build_usage_context(usage_records, site) if usage_records is not None else None
+
+    return calculate_effective_price(
+        site, price, shipping, context,
+        campaigns=active_campaigns,
+        usage_context=usage_context,
+    )
 
 
 __all__ = [
     "compute_pricing",
     "build_context",
+    "build_active_campaigns",
+    "build_campaign_infos",
+    "build_usage_context",
     "SiteType",
     "RakutenRank",
     "UserContext",
+    "UsageContext",
+    "ActiveCampaign",
+    "CampaignInfo",
     "PricingResult",
     "RewardEntry",
 ]

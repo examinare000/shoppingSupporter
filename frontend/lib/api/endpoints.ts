@@ -32,3 +32,13 @@ export function buildProductsSearchUrl(query: string): string {
 export function buildProductHistoryUrl(id: string, days: number = 30): string {
   return `/api/products/${encodeURIComponent(id)}/history?days=${days}`;
 }
+
+/**
+ * サジェストエンドポイントの URL を組み立てる純関数。
+ *
+ * 暫定 SoT: `GET /api/products/{id}/suggestion`（phase3-analytics-suggestion.md F-20）。
+ * productId に含まれる URL 予約文字はエンコードする。
+ */
+export function buildSuggestionUrl(productId: string): string {
+  return `/api/products/${encodeURIComponent(productId)}/suggestion`;
+}

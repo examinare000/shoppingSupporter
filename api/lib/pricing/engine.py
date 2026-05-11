@@ -53,6 +53,32 @@ class UserContext:
             return 0.0
         return self.card_special_rewards.get(site.value, 0.0)
 
+
+@dataclass(frozen=True)
+class ActiveCampaign:
+    """適用中キャンペーンの純粋データ（ORM 非依存）。
+
+    Why ORM 非依存: engine.py は外部依存を持たない純粋関数モジュール（pricing-engine.md §1）。
+    ORM モデルとのブリッジは __init__.py の build_active_campaigns アダプターが担う。
+    """
+    site: SiteType
+    name: str
+    bonus: dict  # {"type": "additive_rate", "rate": float}
+    cap: dict | None = None  # {"type": "points", "value": int} | None
+
+
+@dataclass(frozen=True)
+class UsageContext:
+    """月次利用実績のコンテキスト（キャンペーン上限チェック用）。
+
+    Why engine 層に持つか: calculate_effective_price がキャンペーン上限を
+    計算するために必要。ORM 非依存の純粋データとして保持する。
+    """
+    site: SiteType
+    amount_spent: int = 0
+    points_earned: int = 0
+    shop_count: int = 0
+
 def _build_base_card_entry(price: int, context: UserContext) -> RewardEntry:
     """サイト固有特典がない場合のカード基本還元エントリを返す"""
     rate = context.card_base_rate / 100.0
@@ -143,18 +169,85 @@ def calculate_points_yahoo(price: int, shipping: int, context: UserContext) -> P
 
     return PricingResult(total_points, effective_price, breakdown)
 
+def _apply_campaign_bonuses(
+    price: int,
+    site: SiteType,
+    base_result: PricingResult,
+    campaigns: list[ActiveCampaign],
+    usage_context: UsageContext | None,
+) -> PricingResult:
+    """サイト固有計算の後段でキャンペーンボーナスを積み上げる。
+
+    Why 後段適用: キャンペーンはサイト非依存の構造（加算率 + 上限）のため、
+    サイト固有計算と責務を分離して後段で適用する（plan.md 設計判断）。
+
+    複数キャンペーンの上限計算: points_earned_so_far で既取得ポイントを
+    累積追跡し、先着順に各キャンペーンのキャップ計算に反映する（plan.md §5）。
+    """
+    # Why usage_context.points_earned を初期値にする: 当月すでに獲得済みのポイントを
+    # 累積の起点とし、この取引分のボーナスが追加される前の状態から計算を始める。
+    points_earned_so_far = usage_context.points_earned if usage_context is not None else 0
+
+    extra_entries: list[RewardEntry] = []
+    for campaign in sorted(campaigns, key=lambda c: c.name):
+        if campaign.site != site:
+            continue
+        if campaign.bonus.get("type") != "additive_rate":
+            # 未知の bonus type はスキップ（将来の拡張に備えた安全措置）
+            continue
+
+        raw_bonus = math.floor(price * campaign.bonus["rate"])
+
+        if campaign.cap is not None and usage_context is not None:
+            # usage_context が提供されているときのみ上限チェックを行う。
+            # Why: 利用実績不明時は安全側として全額適用する（test-report.md）。
+            cap_value = campaign.cap["value"]
+            remaining = max(0, cap_value - points_earned_so_far)
+            bonus_points = min(raw_bonus, remaining)
+        else:
+            bonus_points = raw_bonus
+
+        points_earned_so_far += bonus_points
+        extra_entries.append(RewardEntry(
+            label=campaign.name,
+            rate=campaign.bonus["rate"],
+            points=bonus_points,
+        ))
+
+    if not extra_entries:
+        return base_result
+
+    total_extra = sum(e.points for e in extra_entries)
+    new_total = base_result.total_points + total_extra
+    new_effective_price = max(0, base_result.effective_price - total_extra)
+    new_breakdown = list(base_result.breakdown) + extra_entries
+    return PricingResult(new_total, new_effective_price, new_breakdown)
+
+
 def calculate_effective_price(
     site: SiteType,
     price: int,
     shipping: int,
-    context: UserContext
+    context: UserContext,
+    campaigns: list[ActiveCampaign] | None = None,
+    usage_context: UsageContext | None = None,
 ) -> PricingResult:
-    """サイトごとのポイント算出エンジン"""
+    """サイトごとのポイント算出エンジン。
+
+    campaigns / usage_context は省略可能（後方互換）。
+    campaigns が空または None のとき、既存の挙動と同一になる。
+    """
     if site == SiteType.AMAZON:
-        return calculate_points_amazon(price, shipping, context)
+        base_result = calculate_points_amazon(price, shipping, context)
     elif site == SiteType.RAKUTEN:
-        return calculate_points_rakuten(price, shipping, context)
+        base_result = calculate_points_rakuten(price, shipping, context)
     elif site == SiteType.YAHOO:
-        return calculate_points_yahoo(price, shipping, context)
-    # SiteType は閉じた Enum(3値)なので、ここに到達するケースは存在しない
-    raise AssertionError(f"Unreachable: unknown SiteType {site!r}")
+        base_result = calculate_points_yahoo(price, shipping, context)
+    else:
+        # SiteType は閉じた Enum(3値)なので、ここに到達するケースは存在しない
+        raise AssertionError(f"Unreachable: unknown SiteType {site!r}")
+
+    if not campaigns:
+        return base_result
+
+    return _apply_campaign_bonuses(price, site, base_result, campaigns, usage_context)
