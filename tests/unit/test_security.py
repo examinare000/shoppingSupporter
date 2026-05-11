@@ -45,7 +45,7 @@ JWT_ALGORITHM = "HS256"
 @pytest.fixture
 def jwt_secret(monkeypatch):
     """テスト用の JWT_SECRET を環境変数に注入する。"""
-    secret = "unit-test-jwt-secret"
+    secret = "unit-test-jwt-secret-32-chars-long-min"
     monkeypatch.setenv("JWT_SECRET", secret)
     return secret
 
@@ -152,7 +152,7 @@ class TestAccessToken:
                 "sub": str(uuid.uuid4()),
                 "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
             },
-            "different-secret",
+            "different-secret-32-chars-long-min",
             algorithm=JWT_ALGORITHM,
         )
 

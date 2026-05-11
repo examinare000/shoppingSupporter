@@ -361,7 +361,7 @@ class TestMe:
                 "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
                 "iat": datetime.now(timezone.utc),
             },
-            "totally-different-secret",
+            "totally-different-secret-32-chars-long-min",
             algorithm="HS256",
         )
 
