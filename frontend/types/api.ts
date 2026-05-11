@@ -159,6 +159,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/products/{id}/suggestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Suggestion
+         * @description 商品の購入タイミングサジェストを返す。
+         *
+         *     認証不要。ゲストユーザーにもサジェストを提供するための公開エンドポイント（T-20 仕様）。
+         */
+        get: operations["get_suggestion_api_products__id__suggestion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/usage": {
         parameters: {
             query?: never;
@@ -481,6 +503,40 @@ export interface components {
             price: number;
             /** Points */
             points: number;
+        };
+        /**
+         * SuggestionResponse
+         * @description GET /api/products/{id}/suggestion のレスポンス。
+         *
+         *     action が "buy_now" のとき、Optional フィールドはすべて None。
+         *     action が "wait" のとき、Optional フィールドすべてに値が設定される。
+         *
+         *     Why camelCase alias:
+         *         ADR-013 の camelCase 出力規約（serialization_alias を有効化）に従う。
+         */
+        SuggestionResponse: {
+            /**
+             * Productid
+             * Format: uuid
+             */
+            productId: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "buy_now" | "wait";
+            /** Rationale */
+            rationale: string;
+            /** Currentbesteffectiveprice */
+            currentBestEffectivePrice?: number | null;
+            /** Expectedsaleeffectiveprice */
+            expectedSaleEffectivePrice?: number | null;
+            /** Estimatedsaving */
+            estimatedSaving?: number | null;
+            /** Nextsaledate */
+            nextSaleDate?: string | null;
+            /** Nextsalecampaign */
+            nextSaleCampaign?: string | null;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -878,6 +934,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_suggestion_api_products__id__suggestion_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
