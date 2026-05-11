@@ -51,7 +51,10 @@ def get_campaigns_for_suggestion(
                     SaleCampaign.kind == CampaignKind.ONESHOT,
                     SaleCampaign.start_at.is_not(None),
                     SaleCampaign.start_at <= future_cutoff,
-                    SaleCampaign.start_at >= reference_date,
+                    or_(
+                        SaleCampaign.end_at.is_(None),
+                        SaleCampaign.end_at >= reference_date,
+                    ),
                 ),
             ),
         )
