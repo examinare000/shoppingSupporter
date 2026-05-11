@@ -189,7 +189,7 @@ def _apply_campaign_bonuses(
     points_earned_so_far = usage_context.points_earned if usage_context is not None else 0
 
     extra_entries: list[RewardEntry] = []
-    for campaign in campaigns:
+    for campaign in sorted(campaigns, key=lambda c: c.name):
         if campaign.site != site:
             continue
         if campaign.bonus.get("type") != "additive_rate":

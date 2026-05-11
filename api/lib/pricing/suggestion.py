@@ -79,7 +79,7 @@ def compute_suggestion(inp: SuggestionInput) -> SuggestionResult:
         saving = current_price - expected_price
         threshold = math.floor(current_price * _WAIT_SAVING_THRESHOLD_RATE)
 
-        if saving >= threshold:
+        if saving > 0 and saving >= threshold:
             return SuggestionResult(
                 action="wait",
                 rationale=(

@@ -145,7 +145,10 @@ def estimate_next_sales(
             # 将来の拡張型（weekly 等）は未実装としてスキップ
             continue
 
-        days_of_month: list[int] = campaign.recurrence_rule.get("days", [])
+        raw_days = campaign.recurrence_rule.get("days", [])
+        days_of_month: list[int] = [
+            x for x in raw_days if isinstance(x, int) and 1 <= x <= 31
+        ]
         if not days_of_month:
             continue
 
@@ -163,7 +166,7 @@ def estimate_next_sales(
             bonus_rate=campaign.bonus_rate,
         ))
 
-    return results
+    return sorted(results, key=lambda s: (s.estimated_date, s.campaign_name))
 
 
 # ── 内部ヘルパー ──────────────────────────────────────────────────────────────
