@@ -20,7 +20,7 @@ import uuid
 from datetime import date, datetime
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from .common.models import RakutenRank
 
@@ -302,3 +302,62 @@ class MonthlyUsageItemResponse(BaseModel):
     amount_spent: int = Field(serialization_alias="amountSpent")
     points_earned: int = Field(serialization_alias="pointsEarned")
     shop_count: int = Field(serialization_alias="shopCount")
+
+
+# ---------------------------------------------------------------------------
+# Suggestion schemas (T-20)
+# ---------------------------------------------------------------------------
+
+class SuggestionResponse(BaseModel):
+    """GET /api/products/{id}/suggestion のレスポンス。
+
+    action が "buy_now" のとき、Optional フィールドはすべて None。
+    action が "wait" のとき、Optional フィールドすべてに値が設定される。
+
+    Why camelCase alias:
+        ADR-013 の camelCase 出力規約（serialization_alias を有効化）に従う。
+    """
+    product_id: uuid.UUID = Field(serialization_alias="productId")
+    action: Literal["buy_now", "wait"]
+    rationale: str
+    current_best_effective_price: Optional[int] = Field(
+        default=None, serialization_alias="currentBestEffectivePrice"
+    )
+    expected_sale_effective_price: Optional[int] = Field(
+        default=None, serialization_alias="expectedSaleEffectivePrice"
+    )
+    estimated_saving: Optional[int] = Field(
+        default=None, serialization_alias="estimatedSaving"
+    )
+    next_sale_date: Optional[date] = Field(
+        default=None, serialization_alias="nextSaleDate"
+    )
+    next_sale_campaign: Optional[str] = Field(
+        default=None, serialization_alias="nextSaleCampaign"
+    )
+
+    @model_validator(mode="after")
+    def _validate_wait_fields(self) -> "SuggestionResponse":
+        """action='wait' のとき、Optional フィールドすべてに値が設定されることを保証する。
+
+        Why このバリデーターが必要か:
+            docstring の不変条件「wait のとき Optional フィールドすべてに値が設定される」を
+            コードレベルで強制する。個々のフィールドが None でも Pydantic は通過させるため、
+            cross-field バリデーションとして model_validator で一括チェックする。
+        """
+        if self.action == "wait":
+            missing = [
+                field
+                for field, value in [
+                    ("expected_sale_effective_price", self.expected_sale_effective_price),
+                    ("estimated_saving", self.estimated_saving),
+                    ("next_sale_date", self.next_sale_date),
+                    ("next_sale_campaign", self.next_sale_campaign),
+                ]
+                if value is None
+            ]
+            if missing:
+                raise ValueError(
+                    f"action='wait' のとき次のフィールドは必須です: {', '.join(missing)}"
+                )
+        return self
