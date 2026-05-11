@@ -10,13 +10,13 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy.orm import Session
 
 from ..common.database import get_db
+from ..common.time import current_business_month
 from ..common.models import SiteType, User
 from ..common.security import get_current_user
 from ..repositories.monthly_usage import get_usage_by_user_and_month, upsert_usage
@@ -51,7 +51,7 @@ def get_usage(
     未保存のサイトは 200 + 0 デフォルトを返す（404 ではない）。
     profile GET と同パターン（docs/plans/phase3-analytics-suggestion.md §3.2）。
     """
-    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    current_month = current_business_month()
     records = get_usage_by_user_and_month(db, current_user.id, current_month)
     record_map = {r.site: r for r in records}
 
