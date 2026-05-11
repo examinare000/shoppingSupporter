@@ -58,6 +58,7 @@ def upgrade() -> None:
         sa.Column("cap", postgresql.JSONB(), nullable=True),
         sa.Column("conditions", postgresql.JSONB(), nullable=True),
     )
+    op.create_index("ix_sale_campaigns_site_end_at", SALE_CAMPAIGNS_TABLE, ["site", "end_at"])
 
     op.create_table(
         MONTHLY_USAGE_TABLE,
@@ -81,5 +82,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table(MONTHLY_USAGE_TABLE)
+    op.drop_index("ix_sale_campaigns_site_end_at", table_name=SALE_CAMPAIGNS_TABLE)
     op.drop_table(SALE_CAMPAIGNS_TABLE)
     op.execute("DROP TYPE IF EXISTS campaignkind")
