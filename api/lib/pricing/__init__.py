@@ -17,6 +17,7 @@ from .engine import (
     UserContext,
     UsageContext,
 )
+from .forecaster import CampaignInfo
 
 
 def build_context(
@@ -61,6 +62,32 @@ def build_active_campaigns(
             name=c.name,
             bonus=c.bonus,
             cap=c.cap,
+        ))
+    return result
+
+
+def build_campaign_infos(
+    orm_campaigns: "list[OrmSaleCampaign]",
+) -> list[CampaignInfo]:
+    """ORM SaleCampaign リストを forecaster 層の CampaignInfo リストに変換する。
+
+    Why build_active_campaigns と対称的に定義するか:
+        build_active_campaigns が engine.ActiveCampaign を生成するのと対称的に、
+        このアダプターは forecaster.CampaignInfo を生成する。
+        ORM モデルの SiteType と engine の SiteType は同じ値体系（小文字 value）を
+        持つが、型が異なるため変換が必要。
+    """
+    result: list[CampaignInfo] = []
+    for c in orm_campaigns:
+        engine_site = SiteType(c.site.value)
+        bonus_rate = c.bonus.get("rate", 0.0) if c.bonus else 0.0
+        result.append(CampaignInfo(
+            site=engine_site,
+            name=c.name,
+            # Enum.value で文字列化（"recurring" / "oneshot"）
+            kind=c.kind.value,
+            recurrence_rule=c.recurrence_rule,
+            bonus_rate=bonus_rate,
         ))
     return result
 
@@ -119,12 +146,14 @@ __all__ = [
     "compute_pricing",
     "build_context",
     "build_active_campaigns",
+    "build_campaign_infos",
     "build_usage_context",
     "SiteType",
     "RakutenRank",
     "UserContext",
     "UsageContext",
     "ActiveCampaign",
+    "CampaignInfo",
     "PricingResult",
     "RewardEntry",
 ]
