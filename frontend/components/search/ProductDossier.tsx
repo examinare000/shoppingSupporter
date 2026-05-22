@@ -95,13 +95,41 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
       </div>
 
       <div className="mt-8">
-        <h3 className="font-mono text-[10px] small-caps text-ink-muted mb-4 tracking-editorial">
-          Price History (90 Days)
-        </h3>
+        {/* チャートヘッダー: サイト凡例を右端に配置 */}
+        <div className="flex items-baseline justify-between mb-3">
+          <h3 className="font-mono text-[0.6rem] small-caps tracking-editorial text-ink-muted">
+            Price History — 90 Days
+          </h3>
+          <div className="flex items-center gap-3" aria-hidden="true">
+            {(['amazon', 'rakuten', 'yahoo'] as const).map((site) => (
+              <span key={site} className="flex items-center gap-1 font-mono text-[0.55rem] small-caps text-ink-muted">
+                <span
+                  className="inline-block w-4 h-px"
+                  style={{
+                    backgroundColor:
+                      site === 'amazon' ? '#13110F'
+                      : site === 'rakuten' ? '#B23A2A'
+                      : '#A07A1F',
+                  }}
+                />
+                {site === 'amazon' ? 'Am' : site === 'rakuten' ? 'Rk' : 'Yh'}
+              </span>
+            ))}
+          </div>
+        </div>
         {historyData ? (
           <PriceChart data={historyData.histories} />
         ) : (
-          <div className="w-full h-32 animate-pulse bg-paper-high" />
+          /* チャートスケルトン — 紙面の升目感を出すため水平ストライプで構成 */
+          <div className="w-full h-44 md:h-56 border-t border-rule overflow-hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="border-b border-rule animate-pulse"
+                style={{ height: '20%', opacity: 1 - i * 0.15 }}
+              />
+            ))}
+          </div>
         )}
         <SuggestionSection productId={product.id} />
       </div>

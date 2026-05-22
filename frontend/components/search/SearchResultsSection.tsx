@@ -84,16 +84,37 @@ export function SearchResultsSection({
 
   return (
     <section className="px-6 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-        <p className="font-mono text-xs small-caps text-ink-muted">
-          Hits {products.length} 件 / Query &quot;{query}&quot;
-        </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-4 mb-5">
+        <div>
+          {/*
+           * 装飾的な大数字。aria-hidden で Testing Library と
+           * スクリーンリーダーから除外し、下の p 要素に意味を集約する。
+           * getByText は aria-hidden 要素を除外するため /Hits N 件/ テストに影響しない。
+           */}
+          <p
+            className="font-display font-black text-4xl tabular text-ink leading-none mb-0.5"
+            aria-hidden="true"
+          >
+            {products.length}
+          </p>
+          {/* テスト・a11y 用テキスト。getNodeText が直接テキストノードのみを読む仕様のため、
+              子要素を持たない単純テキストとして維持する */}
+          <p className="font-mono text-xs small-caps text-ink-muted">
+            Hits {products.length} 件 / Query &quot;{query}&quot;
+          </p>
+        </div>
         <SortControl value={sortKey} onChange={setSortKey} />
       </div>
 
-      <details className="mb-6 group">
-        <summary className="font-mono text-xs small-caps text-ink-muted cursor-pointer hover:text-ink select-none">
-          Image Sourcing Policy <span aria-hidden="true">▾</span>
+      <details className="mb-5 group">
+        <summary className="inline-flex items-center gap-2 font-mono text-[0.65rem] small-caps tracking-editorial text-ink-muted cursor-pointer hover:text-ink select-none list-none">
+          <span
+            className="inline-block border border-rule px-1 py-0.5 text-[0.55rem] leading-none group-open:border-ink"
+            aria-hidden="true"
+          >
+            ⋮
+          </span>
+          Image Sourcing Policy
         </summary>
         <div className="mt-3 max-w-md">
           <ImagePriorityControl
