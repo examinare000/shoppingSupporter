@@ -24,8 +24,18 @@ const HEADLINE_WORDS = ['Where', 'To', 'Buy', 'That?'];
 
 export function HeroSearch({ onSearch }: HeroSearchProps) {
   return (
-    <section className="px-6 pt-16 pb-12">
+    <section className="px-6 pt-14 pb-12">
       <div className="max-w-3xl mx-auto text-center">
+
+        {/* エディション表記 — 紙面の版数スタンプ */}
+        <p
+          className="hero-char font-mono text-[0.6rem] small-caps tracking-editorial text-ink-muted mb-7 opacity-0"
+          style={{ animationDelay: '0ms' }}
+          aria-hidden="true"
+        >
+          Vol. I &ensp;—&ensp; 実質価格横断比較
+        </p>
+
         <h1
           aria-label="Where To Buy That?"
           className="font-display font-black tracking-tight leading-[0.95] text-ink break-normal"
@@ -36,18 +46,24 @@ export function HeroSearch({ onSearch }: HeroSearchProps) {
               key={`${word}-${i}`}
               aria-hidden="true"
               className="inline-block hero-char mr-[0.25em] last:mr-0"
-              style={{ animationDelay: `${i * 100}ms` }}
+              style={{ animationDelay: `${(i + 1) * 90}ms` }}
             >
               {word}
             </span>
           ))}
         </h1>
 
-        <p className="mt-8 font-serif text-base md:text-lg leading-relaxed text-ink-muted">
+        <p
+          className="hero-char mt-8 font-serif text-base md:text-lg leading-relaxed text-ink-muted opacity-0"
+          style={{ animationDelay: '500ms' }}
+        >
           Amazon・楽天・Yahoo!ショッピングを横断し、送料・ポイントを差し引いた実質価格で比較する。
         </p>
 
-        <div className="mt-10 text-left">
+        <div
+          className="hero-char mt-10 text-left opacity-0"
+          style={{ animationDelay: '600ms' }}
+        >
           <SearchForm onSearch={onSearch} />
           <p className="mt-3 font-mono text-xs small-caps text-ink-muted/70">
             品名・ブランド・JAN で検索
