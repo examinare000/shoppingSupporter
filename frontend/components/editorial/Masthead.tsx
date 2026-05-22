@@ -6,14 +6,23 @@ import { RuledDivider } from './RuledDivider';
  * 紙面ヘッダー。
  *
  * 設計意図:
- * - サイト名（pricehack ワードマーク）と日付スタンプのみのミニマル構成。
- *   旧構成の「Edition No / Tokyo / 二重罫線 / キャッチフレーズ」は、ヒーローの h1 と
- *   役割が重複してダサくなるため一掃する（ページ全体の h1 はヒーローの「Where To Buy That?」に集約）。
- * - ロゴは `<Link href="/">` でホームに遷移する。クリック可能な題字は新聞紙面の慣例から外れるが、
- *   Web のヘッダーとしては自然で発見性が高いトレードオフを優先する。
- * - 日付は固定値（モック段階）。将来は記事配信日のメタを差し込む予定地点。
+ * - ロゴ（pricehack ワードマーク）+ 右側ナビ（Account / 日付）の構成。
+ * - 日付は new Date() で動的に生成する。サーバーコンポーネントのため、
+ *   Next.js はリクエスト時に評価する。静的生成ではビルド時刻が入るが許容範囲。
+ * - Account リンクはプロフィールページへの最短経路。
+ *   アイコンは使わず mono 小カプスのテキストリンクで紙面感を保つ。
  */
+function buildDate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}.${m}.${day}`;
+}
+
 export function Masthead() {
+  const today = buildDate();
+
   return (
     <header className="w-full bg-paper">
       <RuledDivider variant="single" />
@@ -25,9 +34,24 @@ export function Masthead() {
         >
           <Logo size="md" as="span" />
         </Link>
-        <span className="font-mono text-xs small-caps text-ink-muted">
-          2026.05.03
-        </span>
+
+        <nav className="flex items-center gap-6" aria-label="サイトナビゲーション">
+          <Link
+            href="/profile"
+            className="font-mono text-xs small-caps tracking-editorial text-ink-muted hover:text-ink transition-colors duration-150 group"
+          >
+            Account{' '}
+            <span
+              className="inline-block transition-transform duration-150 group-hover:translate-x-0.5"
+              aria-hidden="true"
+            >
+              →
+            </span>
+          </Link>
+          <span className="font-mono text-xs small-caps text-ink-muted tabular">
+            {today}
+          </span>
+        </nav>
       </div>
       <RuledDivider variant="single" />
     </header>
