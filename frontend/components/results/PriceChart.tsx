@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { components } from '@/types/api';
+import { SITE_META } from '@/lib/site/siteMeta';
 
 type PriceHistoryEntry = components['schemas']['PriceHistoryEntry'];
 
@@ -27,12 +28,6 @@ type PriceHistoryEntry = components['schemas']['PriceHistoryEntry'];
 interface PriceChartProps {
   data: PriceHistoryEntry[];
 }
-
-const SITE_COLORS: Record<string, string> = {
-  amazon:  '#13110F', // --ink-primary
-  rakuten: '#B23A2A', // --accent-vermilion
-  yahoo:   '#A07A1F', // --accent-mustard
-};
 
 const PriceChart: React.FC<PriceChartProps> = ({ data }) => {
   const formattedData = data.map((entry) => {
@@ -123,7 +118,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ data }) => {
               key={site}
               type="stepAfter"
               dataKey={site}
-              stroke={SITE_COLORS[site] ?? 'var(--ink-primary)'}
+              stroke={SITE_META[site]?.color ?? 'var(--ink-primary)'}
               strokeWidth={site === 'rakuten' ? 1.5 : 1.25}
               dot={false}
               activeDot={{ r: 3, strokeWidth: 0 }}

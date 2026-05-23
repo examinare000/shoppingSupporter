@@ -9,6 +9,7 @@ import { MarginalNote } from '@/components/editorial/MarginalNote';
 import { RuledDivider } from '@/components/editorial/RuledDivider';
 import { ProductThumbnail } from '@/components/results/ProductThumbnail';
 import PriceChart from '@/components/results/PriceChart';
+import { SITE_META } from '@/lib/site/siteMeta';
 import { ListingRow } from './ListingRow';
 import { SuggestionSection } from './SuggestionSection';
 
@@ -101,18 +102,13 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
             Price History — 90 Days
           </h3>
           <div className="flex items-center gap-3" aria-hidden="true">
-            {(['amazon', 'rakuten', 'yahoo'] as const).map((site) => (
+            {(Object.keys(SITE_META) as Array<keyof typeof SITE_META>).map((site) => (
               <span key={site} className="flex items-center gap-1 font-mono text-[0.55rem] small-caps text-ink-muted">
                 <span
                   className="inline-block w-4 h-px"
-                  style={{
-                    backgroundColor:
-                      site === 'amazon' ? '#13110F'
-                      : site === 'rakuten' ? '#B23A2A'
-                      : '#A07A1F',
-                  }}
+                  style={{ backgroundColor: SITE_META[site]!.color }}
                 />
-                {site === 'amazon' ? 'Am' : site === 'rakuten' ? 'Rk' : 'Yh'}
+                {SITE_META[site]!.shortLabel}
               </span>
             ))}
           </div>
