@@ -74,8 +74,9 @@ export function HeroSearch({ onSearch }: HeroSearchProps) {
       {/*
        * ヒーロー文字のスタッガー出現。
        * Tailwind の任意 keyframes を CSS 変数で定義する代わりに、コンポーネント内の <style> で
-       * keyframes を宣言する。グローバル CSS を汚さず、このコンポーネントに閉じる
-       * （prefers-reduced-motion はグローバル CSS で全アニメーションを無効化済み）
+       * keyframes を宣言する。グローバル CSS を汚さず、このコンポーネントに閉じる。
+       * prefers-reduced-motion では animation を無効化し、opacity: 1 に強制して
+       * テキストが不可視のまま残らないようにする。
        */}
       <style>{`
         @keyframes heroCharFadeIn {
@@ -85,6 +86,13 @@ export function HeroSearch({ onSearch }: HeroSearchProps) {
         .hero-char {
           opacity: 0;
           animation: heroCharFadeIn 0.6s ease-out forwards;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hero-char {
+            opacity: 1 !important;
+            transform: none !important;
+            animation: none !important;
+          }
         }
       `}</style>
     </section>
