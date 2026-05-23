@@ -9,6 +9,7 @@ import { MarginalNote } from '@/components/editorial/MarginalNote';
 import { RuledDivider } from '@/components/editorial/RuledDivider';
 import { ProductThumbnail } from '@/components/results/ProductThumbnail';
 import PriceChart from '@/components/results/PriceChart';
+import { SITE_META } from '@/lib/site/siteMeta';
 import { ListingRow } from './ListingRow';
 import { SuggestionSection } from './SuggestionSection';
 
@@ -47,6 +48,13 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
   const { data: historyData } = useSWR<ProductHistoryResponse>(
     buildProductHistoryUrl(product.id, 90) // 直近 90 日分を表示
   );
+
+  // チャートに実際にプロットされるサイトだけ凡例に表示する。
+  // PriceChart 側と同じロジック（histories に登場するサイトキーの Set）で導出する。
+  const chartSites = historyData
+    ? Array.from(new Set(historyData.histories.flatMap((e) => Object.keys(e.sites))))
+        .filter((s) => s in SITE_META)
+    : [];
 
   return (
     <article className="py-8">
@@ -95,13 +103,36 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
       </div>
 
       <div className="mt-8">
-        <h3 className="font-mono text-[10px] small-caps text-ink-muted mb-4 tracking-editorial">
-          Price History (90 Days)
-        </h3>
+        {/* チャートヘッダー: サイト凡例を右端に配置 */}
+        <div className="flex items-baseline justify-between mb-3">
+          <h3 className="font-mono text-[0.6rem] small-caps tracking-editorial text-ink-muted">
+            Price History — 90 Days
+          </h3>
+          <div className="flex items-center gap-3" aria-hidden="true">
+            {chartSites.map((site) => (
+              <span key={site} className="flex items-center gap-1 font-mono text-[0.55rem] small-caps text-ink-muted">
+                <span
+                  className="inline-block w-4 h-px"
+                  style={{ backgroundColor: SITE_META[site]!.color }}
+                />
+                {SITE_META[site]!.shortLabel}
+              </span>
+            ))}
+          </div>
+        </div>
         {historyData ? (
           <PriceChart data={historyData.histories} />
         ) : (
-          <div className="w-full h-32 animate-pulse bg-paper-high" />
+          /* チャートスケルトン — 紙面の升目感を出すため水平ストライプで構成 */
+          <div className="w-full h-44 md:h-56 border-t border-rule overflow-hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="border-b border-rule animate-pulse"
+                style={{ height: '20%', opacity: 1 - i * 0.15 }}
+              />
+            ))}
+          </div>
         )}
         <SuggestionSection productId={product.id} />
       </div>

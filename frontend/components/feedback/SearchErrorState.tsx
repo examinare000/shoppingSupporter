@@ -30,27 +30,39 @@ export function SearchErrorState({ query, error, onRetry }: SearchErrorStateProp
   return (
     <section className="py-12">
       <RuledDivider variant="double" />
-      <div className="px-6 py-10 text-center">
-        <p className="font-mono text-xs small-caps text-vermilion mb-4">
+      <div className="py-14 text-center">
+        <p
+          className="font-display font-black text-[5rem] leading-none text-vermilion/20 select-none mb-4"
+          aria-hidden="true"
+        >
+          ×
+        </p>
+        <p className="font-mono text-[0.65rem] small-caps tracking-editorial text-vermilion mb-4">
           Press stopped — 印刷停止
         </p>
-        <h2 className="font-display text-3xl tracking-tightish text-ink mb-3">
+        <h2 className="font-display text-4xl tracking-tightish text-ink mb-4">
           読み込みに失敗しました。
         </h2>
-        <p className="font-serif text-base text-ink-muted leading-relaxed max-w-prose mx-auto mb-6">
-          検索ワード「<span className="font-bold text-ink">{query}</span>
-          」の取得中に問題が発生しました。通信状況を確認のうえ、再度お試しください。
+        <p className="font-serif text-base text-ink-muted leading-relaxed max-w-sm mx-auto mb-8">
+          <span className="font-bold text-ink italic">&ldquo;{query}&rdquo;</span>{' '}
+          の取得中に問題が発生しました。通信状況を確認のうえ、再度お試しください。
         </p>
         <button
           type="button"
           onClick={onRetry}
-          className="font-mono text-sm small-caps text-ink hover:text-vermilion transition-colors border-b-2 border-rule hover:border-vermilion py-2 px-1 whitespace-nowrap"
+          className="font-mono text-sm small-caps tracking-editorial text-ink hover:text-vermilion transition-colors duration-150 border-b-2 border-rule hover:border-vermilion py-2 px-1 whitespace-nowrap group"
         >
-          リトライ <span aria-hidden="true">↻</span>
+          リトライ{' '}
+          <span
+            className="inline-block transition-transform duration-200 group-hover:rotate-180"
+            aria-hidden="true"
+          >
+            ↻
+          </span>
         </button>
       </div>
       <RuledDivider variant="double" />
-      <div className="mt-4 px-6">
+      <div className="mt-4">
         <MarginalNote>詳細: {describeError(error)}</MarginalNote>
       </div>
     </section>

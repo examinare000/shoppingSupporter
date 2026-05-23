@@ -24,33 +24,40 @@ interface ListingRowProps {
 export function ListingRow({ listing, isCheapest = false }: ListingRowProps) {
   const effective = calculateEffectivePrice(listing);
 
-  const rowAccentClass = isCheapest ? 'border-l-2 border-vermilion pl-3' : 'pl-3';
-
   return (
     <tr
-      className={`${rowAccentClass} border-b border-dashed border-rule`.trim()}
+      className={`border-b border-dashed border-rule${isCheapest ? ' border-l-2 border-vermilion' : ''}`}
     >
-      <td className="py-2 align-middle">
-        <SiteGlyph site={listing.siteType as SiteType} />
+      <td className="py-2.5 pl-3 align-middle">
+        <SiteGlyph
+          site={listing.siteType as SiteType}
+          className={isCheapest ? 'border-vermilion text-vermilion' : ''}
+        />
       </td>
-      <td className="py-2 px-2 text-right font-mono tabular text-xs text-ink-muted">
+      <td className="py-2.5 px-3 text-right font-mono tabular text-xs text-ink-muted align-middle">
         − {formatPoints(listing.points ?? 0)}
       </td>
       <td
-        className={`py-2 px-2 text-right font-mono tabular text-base font-bold ${
+        className={`py-2.5 px-3 text-right font-mono tabular text-base font-bold align-middle ${
           isCheapest ? 'text-vermilion' : 'text-ink'
         }`}
       >
         {formatYen(effective)}
       </td>
-      <td className="py-2 px-2 text-right">
+      <td className="py-2.5 px-3 text-right align-middle">
         <a
           href={listing.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-mono text-xs small-caps text-ink hover:text-vermilion underline underline-offset-4 decoration-rule whitespace-nowrap"
+          className="font-mono text-[0.65rem] small-caps tracking-editorial text-ink-muted hover:text-vermilion transition-colors duration-100 whitespace-nowrap group/link"
         >
-          商品ページへ <span aria-hidden="true">→</span>
+          商品ページへ{' '}
+          <span
+            className="inline-block transition-transform duration-100 group-hover/link:translate-x-0.5"
+            aria-hidden="true"
+          >
+            →
+          </span>
         </a>
       </td>
     </tr>
