@@ -49,6 +49,13 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
     buildProductHistoryUrl(product.id, 90) // 直近 90 日分を表示
   );
 
+  // チャートに実際にプロットされるサイトだけ凡例に表示する。
+  // PriceChart 側と同じロジック（histories に登場するサイトキーの Set）で導出する。
+  const chartSites = historyData
+    ? Array.from(new Set(historyData.histories.flatMap((e) => Object.keys(e.sites))))
+        .filter((s) => s in SITE_META)
+    : [];
+
   return (
     <article className="py-8">
       <header className="flex items-baseline gap-3 mb-2">
@@ -102,7 +109,7 @@ export function ProductDossier({ product, index, priority }: ProductDossierProps
             Price History — 90 Days
           </h3>
           <div className="flex items-center gap-3" aria-hidden="true">
-            {(Object.keys(SITE_META) as Array<keyof typeof SITE_META>).map((site) => (
+            {chartSites.map((site) => (
               <span key={site} className="flex items-center gap-1 font-mono text-[0.55rem] small-caps text-ink-muted">
                 <span
                   className="inline-block w-4 h-px"
