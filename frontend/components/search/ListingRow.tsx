@@ -26,7 +26,7 @@ export function ListingRow({ listing, isCheapest = false }: ListingRowProps) {
 
   return (
     <tr
-      className={`border-b border-dashed border-rule group${isCheapest ? ' border-l-2 border-vermilion' : ''}`}
+      className={`border-b border-dashed border-rule${isCheapest ? ' border-l-2 border-vermilion' : ''}`}
     >
       <td className="py-2.5 pl-3 align-middle">
         <SiteGlyph
@@ -49,11 +49,11 @@ export function ListingRow({ listing, isCheapest = false }: ListingRowProps) {
           href={listing.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-mono text-[0.65rem] small-caps tracking-editorial text-ink-muted hover:text-vermilion transition-colors duration-100 whitespace-nowrap group"
+          className="font-mono text-[0.65rem] small-caps tracking-editorial text-ink-muted hover:text-vermilion transition-colors duration-100 whitespace-nowrap group/link"
         >
           商品ページへ{' '}
           <span
-            className="inline-block transition-transform duration-100 group-hover:translate-x-0.5"
+            className="inline-block transition-transform duration-100 group-hover/link:translate-x-0.5"
             aria-hidden="true"
           >
             →
